@@ -1,88 +1,104 @@
-# Applied Data Analysis & Machine Learning Portfolio
+# Applied Data Analysis Portfolio
 
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg)](https://www.docker.com/)
-[![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)](https://streamlit.io/)
-[![LightGBM](https://img.shields.io/badge/Model-LightGBM-brightgreen.svg)](https://lightgbm.readthedocs.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-A curated collection of three end-to-end (E2E) data analysis and machine learning systems spanning distinct domains. Built with realistic data acquisition pipelines (custom web scraping and public API ingestion), tree-based predictive models (`LightGBM`, `XGBoost`), time-series forecasting (`Prophet`), model explainability (`SHAP`), and containerized interactive dashboards (`Streamlit` + `Docker`).
+This repository contains three end-to-end data analysis and machine learning projects developed for the course referenced in [program.pdf](file:///home/yur4uwe/Uni/data-analisys/program.pdf).
 
 ---
 
-## 📁 Projects Overview
+## Projects Overview
 
-| # | Project Name | Domain | Data Sourcing | Core ML & Analytics | Serving & UI | Spec Link |
-| :-: | :--- | :--- | :--- | :--- | :--- | :-: |
-| **01** | **Tech Labor Market & Compensation Intelligence** | HR Tech / Labor Economics | Web scraping tech boards (Djinni, RemoteOK) | `LightGBM`, `XGBoost`, `SHAP` values, Skill Extraction NLP | Streamlit Dashboard | [View Spec](file:///home/yur4uwe/Uni/data-analisys/01-tech-labor-market/README.md) |
-| **02** | **Steam Player Demand & Trend Forecasting** | Digital Media / Gaming Analytics | Steam Web API & SteamCharts / SteamSpy historical data | Hybrid `Prophet` + `LightGBM` residual modeling, Lag features | Streamlit Scenario Simulator | [View Spec](file:///home/yur4uwe/Uni/data-analisys/02-steam-demand-forecast/README.md) |
-| **03** | **Second-Hand Market Valuation & Deal Spotter** | E-Commerce / Automotive & Hardware | Web scraping marketplace listings (AutoRia / OLX) | `LightGBM` Regressor, Residual & Statistical Anomaly Detection | Streamlit Bargain Radar | [View Spec](file:///home/yur4uwe/Uni/data-analisys/03-secondhand-deal-spotter/README.md) |
+| ID | Directory | Domain | Description | Status |
+| :- | :--- | :--- | :--- | :--- |
+| 01 | [01-tech-labor-market](file:///home/yur4uwe/Uni/data-analisys/01-tech-labor-market/README.md) | HR Tech / Labor Economics | Tech job scraping, salary modeling, and skill attribution. | In progress |
+| 02 | [02-steam-demand-forecast](file:///home/yur4uwe/Uni/data-analisys/02-steam-demand-forecast/README.md) | Digital Media / Gaming Analytics | Steam player count time-series ingestion and demand forecasting. | In progress |
+| 03 | [03-secondhand-deal-spotter](file:///home/yur4uwe/Uni/data-analisys/03-secondhand-deal-spotter/README.md) | E-commerce / Second-Hand Market | Marketplace listing valuation and pricing anomaly detection. | In progress |
 
 ---
 
-## 🏛️ Repository Architecture
-
-This repository is organized as a **modular monorepo**: each project is completely autonomous with its own data pipelines, source modules, tests, dependencies, and `Dockerfile`.
+## Repository Structure
 
 ```text
 data-analisys/
-├── 01-tech-labor-market/          # Project 1: Salary prediction & skill ROI
-│   ├── data/                      # Raw & processed datasets
-│   ├── src/                       # Scraper, features, model training & Streamlit UI
-│   ├── Dockerfile                 # Standalone Docker container
-│   ├── requirements.txt           # Project-specific dependencies
-│   └── README.md                  # Project 1 documentation
-│
-├── 02-steam-demand-forecast/      # Project 2: Player count time-series forecast
-│   ├── data/                      # Time-series snapshots
-│   ├── src/                       # Ingestion, Prophet baseline, LightGBM residuals & UI
-│   ├── Dockerfile                 # Standalone Docker container
-│   ├── requirements.txt           # Project-specific dependencies
-│   └── README.md                  # Project 2 documentation
-│
-├── 03-secondhand-deal-spotter/    # Project 3: Fair market value & deal anomaly detector
-│   ├── data/                      # Marketplace listings
-│   ├── src/                       # Scraper, depreciation modeling, residual deal scoring & UI
-│   ├── Dockerfile                 # Standalone Docker container
-│   ├── requirements.txt           # Project-specific dependencies
-│   └── README.md                  # Project 3 documentation
-│
-├── .gitignore                     # Monorepo data & artifact exclusion rules
-├── program.pdf                    # Academic course syllabus
-└── README.md                      # Master portfolio index (this file)
+├── 01-tech-labor-market/          # Project 1
+│   ├── data/
+│   ├── src/
+│   ├── tests/
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   └── README.md
+├── 02-steam-demand-forecast/      # Project 2
+│   ├── data/
+│   ├── src/
+│   ├── tests/
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   └── README.md
+├── 03-secondhand-deal-spotter/    # Project 3
+│   ├── data/
+│   ├── src/
+│   ├── tests/
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   └── README.md
+├── .gitignore
+├── program.pdf
+├── pyproject.toml
+└── README.md
 ```
 
 ---
 
-## 🚀 Quickstart & Execution
+## Running Instructions
 
-Each project can be operated and run independently.
+Each project uses `uv` with its own `pyproject.toml`.
 
-### Running with Docker (Recommended)
-Navigate into any project directory and run:
+### Project 1: Tech Labor Market
 
+#### Local execution with uv
 ```bash
-# Build the project image
-docker build -t <project-tag> .
-
-# Launch the interactive Streamlit service
-docker run -p 8501:8501 <project-tag>
+cd 01-tech-labor-market
+uv sync
+uv run streamlit run src/app/main.py
 ```
 
-### Running Locally with Python
+#### Containerized execution with Docker
 ```bash
-# Create and activate a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies for the specific project
-pip install -r <project-folder>/requirements.txt
-
-# Run the project dashboard
-streamlit run <project-folder>/src/app/main.py
+cd 01-tech-labor-market
+docker build -t tech-labor-market .
+docker run -p 8501:8501 tech-labor-market
 ```
 
 ---
 
-## 🎓 Academic Course Reference
-This work is developed as part of the curriculum: **"Проєкт з розробки системи аналізу даних"** (Specialty 122 "Computer Science", lecturer: B.M. Pavlyshenko). See [program.pdf](file:///home/yur4uwe/Uni/data-analisys/program.pdf) for the course syllabus.
+### Project 2: Steam Player Demand Forecast
+
+#### Local execution with uv
+```bash
+cd 02-steam-demand-forecast
+uv sync
+uv run streamlit run src/app/main.py
+```
+
+#### Containerized execution with Docker
+```bash
+cd 02-steam-demand-forecast
+docker build -t steam-demand-forecast .
+docker run -p 8501:8501 steam-demand-forecast
+```
+
+---
+
+### Project 3: Second-Hand Market Valuation
+
+#### Local execution with uv
+```bash
+cd 03-secondhand-deal-spotter
+uv sync
+uv run streamlit run src/app/main.py
+```
+
+#### Containerized execution with Docker
+```bash
+cd 03-secondhand-deal-spotter
+docker build -t secondhand-deal-spotter .
+docker run -p 8501:8501 secondhand-deal-spotter
+```

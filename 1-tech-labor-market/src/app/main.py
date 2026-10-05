@@ -322,16 +322,18 @@ with tab_roi:
 
                     med_sal = float(sub["salary_mid_usd"].median())
                     raw_diff = med_sal - current_pred
-                    roi_rows.append(
-                        {
-                            "Skill": s.replace("_", " ").title(),
-                            "Active Postings (n)": count,
-                            "Model Controlled Uplift ($/mo)": controlled_delta,
-                            "Controlled Annual Uplift ($/yr)": controlled_delta * 12.0,
-                            "Postings Median Salary ($/mo)": med_sal,
-                            "Raw Market Delta ($/mo)": raw_diff,
-                        }
-                    )
+                    # Only retain skills that provide a strictly positive uplift
+                    if controlled_delta > 0.01:
+                        roi_rows.append(
+                            {
+                                "Skill": s.replace("_", " ").title(),
+                                "Active Postings (n)": count,
+                                "Model Controlled Uplift ($/mo)": controlled_delta,
+                                "Controlled Annual Uplift ($/yr)": controlled_delta * 12.0,
+                                "Postings Median Salary ($/mo)": med_sal,
+                                "Raw Market Delta ($/mo)": raw_diff,
+                            }
+                        )
 
         if roi_rows:
             roi_df = pd.DataFrame(roi_rows).sort_values(
@@ -385,7 +387,7 @@ with tab_roi:
             )
         else:
             st.info(
-                "You have selected all skills that appear in the current scraped dataset."
+                "No additional skills in the current dataset provide a strictly positive uplift for your profile, or all relevant skills have already been selected."
             )
 
 # -------------------------------------------------------------

@@ -1,27 +1,29 @@
-from dataclasses import asdict
 import json
 import logging
+from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
+
+import numpy as np
 import pandas as pd
 
 from .cleaner import clean_record
-from .skills import TECH_SKILL_PATTERNS
+from .composites import add_skill_composites_to_df
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 def build_feature_dataset(
     raw_data_dir: Path,
     output_dir: Path,
-    salary_only: bool = False,
-) -> pd.DataFrame:
-    """Read raw JSONL files, clean records, engineer features, and export dataset."""
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Read raw JSONL files, clean records, engineer composite features, and export datasets."""
     raw_files = sorted(raw_data_dir.glob("*.jsonl"))
     if not raw_files:
         logger.warning(f"No .jsonl files found in {raw_data_dir}")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     cleaned_records = []
     seen_ids = set()
@@ -35,7 +37,6 @@ def build_feature_dataset(
                 try:
                     raw_dict = json.loads(line)
                     rec = clean_record(raw_dict)
-                    # Deduplicate across runs by source and id
                     unique_key = (rec.source, rec.id)
                     if unique_key in seen_ids:
                         continue
@@ -46,44 +47,58 @@ def build_feature_dataset(
 
     if not cleaned_records:
         logger.warning("No records successfully parsed.")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     df = pd.DataFrame(cleaned_records)
     logger.info(f"Loaded {len(df)} unique records.")
 
-    # 1. Feature Engineering
-    df["num_skills"] = df["skills"].apply(lambda s: len(s) if isinstance(s, list) else 0)
+    # 1. Text statistics
     df["title_char_length"] = df["title"].str.len().fillna(0).astype(int)
-    df["desc_word_count"] = df["description_cleaned"].str.split().apply(lambda w: len(w) if isinstance(w, list) else 0)
+    df["desc_word_count"] = (
+        df["description_cleaned"]
+        .str.split()
+        .apply(lambda w: len(w) if isinstance(w, list) else 0)
+    )
 
-    # 2. Binary Skill Features (one column per canonical skill)
-    for skill_name in TECH_SKILL_PATTERNS.keys():
-        col_name = f"skill_{skill_name.replace('-', '_').replace('/', '_')}"
-        df[col_name] = df["skills"].apply(lambda s_list: int(skill_name in s_list) if isinstance(s_list, list) else 0)
+    # 2. Add composite domain aggregates and individual binary skill flags
+    df = add_skill_composites_to_df(df, skills_col="skills")
 
-    # 3. Filter for salary regression target if requested
-    if salary_only:
-        initial_len = len(df)
-        df = df[df["salary_mid_usd"].notnull()].copy()
-        logger.info(f"Filtered for records with salary: {len(df)} of {initial_len} retained.")
+    # 3. Target transformations (log-salary for right-skew mitigation)
+    df["log_salary_mid_usd"] = np.where(
+        df["salary_mid_usd"].notnull(),
+        np.log1p(df["salary_mid_usd"]),
+        np.nan,
+    )
 
-    # 4. Save to processed directory
+    # Flatten skills list into comma-delimited string for clean parquet serialization
+    df["skills_str"] = df["skills"].apply(
+        lambda s: ", ".join(s) if isinstance(s, list) else ""
+    )
+
+    # 4. Partition into all records vs. salary-labeled subset for training
+    df_labeled = df[df["salary_mid_usd"].notnull()].copy()
+
+    # 5. Export datasets
     output_dir.mkdir(parents=True, exist_ok=True)
-    parquet_path = output_dir / ("salary_features.parquet" if salary_only else "all_jobs_features.parquet")
-    csv_path = output_dir / ("salary_features.csv" if salary_only else "all_jobs_features.csv")
+    all_parquet = output_dir / "all_jobs_features.parquet"
+    all_csv = output_dir / "all_jobs_features.csv"
+    labeled_parquet = output_dir / "salary_labeled_features.parquet"
+    labeled_csv = output_dir / "salary_labeled_features.csv"
 
-    # Parquet cannot serialize mixed objects easily if list is empty or inconsistent, so store skills as comma-separated in CSV/parquet
-    df_export = df.copy()
-    df_export["skills_str"] = df_export["skills"].apply(lambda s: ", ".join(s) if isinstance(s, list) else "")
+    df.to_parquet(all_parquet, index=False)
+    df.to_csv(all_csv, index=False)
 
-    df_export.to_parquet(parquet_path, index=False)
-    df_export.to_csv(csv_path, index=False)
+    df_labeled.to_parquet(labeled_parquet, index=False)
+    df_labeled.to_csv(labeled_csv, index=False)
 
-    logger.info(f"Saved feature dataset ({len(df_export)} rows) to:")
-    logger.info(f"  - {parquet_path}")
-    logger.info(f"  - {csv_path}")
+    logger.info(
+        f"Saved complete dataset ({len(df)} rows, {df.shape[1]} cols) to {all_parquet.name}"
+    )
+    logger.info(
+        f"Saved salary-labeled dataset ({len(df_labeled)} rows) to {labeled_parquet.name}"
+    )
 
-    return df_export
+    return df, df_labeled
 
 
 if __name__ == "__main__":
@@ -91,4 +106,4 @@ if __name__ == "__main__":
     raw_dir = project_root / "data" / "raw"
     proc_dir = project_root / "data" / "processed"
 
-    build_feature_dataset(raw_dir, proc_dir, salary_only=False)
+    build_feature_dataset(raw_dir, proc_dir)

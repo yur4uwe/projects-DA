@@ -11,10 +11,14 @@ class CleanedJobRecord:
     category: str
     hiring_organization: str
     experience_years: float | None
+    is_experience_inferred: bool
+    seniority_level: int
     salary_min_usd: float | None
     salary_max_usd: float | None
     salary_mid_usd: float | None
     remote_type: str
+    is_remote: int
     english_level: str | None
+    english_proficiency_rank: int
     skills: list[str] = field(default_factory=list)
     description_cleaned: str = ""

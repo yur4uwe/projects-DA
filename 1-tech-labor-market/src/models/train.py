@@ -63,9 +63,11 @@ def train_and_evaluate(
                 (
                     "model",
                     LGBMRegressor(
-                        n_estimators=100,
+                        objective="regression_l1",
+                        n_estimators=80,
                         learning_rate=0.05,
                         num_leaves=15,
+                        min_child_samples=5,
                         random_state=42,
                         verbose=-1,
                     ),
@@ -92,10 +94,11 @@ def train_and_evaluate(
             logger.warning(f"Failed CV for {name}: {exc}")
             cv_results[name] = {"MAE": float("inf"), "RMSE": float("inf"), "R2": -1.0}
 
-    # Select best model by lowest MAE
-    best_name = min(cv_results, key=lambda m: cv_results[m]["MAE"])
-    best_pipeline = models[best_name]
-    logger.info(f"Best performing model: {best_name} (MAE: ${cv_results[best_name]['MAE']})")
+    # Select best candidate model (excluding the Dummy baseline benchmark)
+    trained_candidates = {k: v for k, v in models.items() if "Dummy" not in k}
+    best_name = min(trained_candidates, key=lambda m: cv_results[m]["MAE"])
+    best_pipeline = trained_candidates[best_name]
+    logger.info(f"Best performing predictive model: {best_name} (MAE: ${cv_results[best_name]['MAE']})")
 
     # Fit best model on entire dataset
     best_pipeline.fit(X, y)

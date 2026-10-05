@@ -27,15 +27,15 @@ def normalize_salary(
     if currency != "USD":
         return None, None, None
 
-    val = base_salary.get("value", {})
-    if isinstance(val, dict):
+    val = base_salary.get("value")
+    if isinstance(val, dict) and val:
         raw_min = val.get("minValue")
         raw_max = val.get("maxValue")
-        unit = val.get("unitText", "MONTH").upper()
+        unit = str(val.get("unitText", "MONTH")).upper()
     else:
         raw_min = base_salary.get("minValue")
         raw_max = base_salary.get("maxValue")
-        unit = base_salary.get("unitText", "MONTH").upper()
+        unit = str(base_salary.get("unitText", "MONTH")).upper()
 
     try:
         s_min = float(raw_min) if raw_min is not None else None

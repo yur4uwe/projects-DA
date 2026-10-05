@@ -1,14 +1,15 @@
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import json
 import logging
-from pathlib import Path
 import sqlite3
-from typing import Any, Optional
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "models" / "experiments.db"
+DEFAULT_DB_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "models" / "experiments.db"
+)
 
 
 @dataclass
@@ -29,10 +30,10 @@ class ExperimentRecord:
     medae: float
     mape: float
     hyperparams: dict[str, Any]
-    extra_metadata: Optional[dict[str, Any]] = None
+    extra_metadata: dict[str, Any] | None = None
 
 
-def get_db_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
+def get_db_connection(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or DEFAULT_DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
@@ -40,7 +41,7 @@ def get_db_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     return conn
 
 
-def init_db(db_path: Optional[Path] = None) -> None:
+def init_db(db_path: Path | None = None) -> None:
     conn = get_db_connection(db_path)
     with conn:
         conn.execute(
@@ -69,7 +70,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
     conn.close()
 
 
-def log_experiment(record: ExperimentRecord, db_path: Optional[Path] = None) -> str:
+def log_experiment(record: ExperimentRecord, db_path: Path | None = None) -> str:
     init_db(db_path)
     conn = get_db_connection(db_path)
     with conn:
@@ -127,19 +128,21 @@ def row_to_record(row: sqlite3.Row) -> ExperimentRecord:
     )
 
 
-def list_experiments(db_path: Optional[Path] = None, limit: int = 100) -> list[ExperimentRecord]:
+def list_experiments(
+    db_path: Path | None = None, limit: int = 100
+) -> list[ExperimentRecord]:
     init_db(db_path)
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM experiments ORDER BY timestamp ASC LIMIT ?", (limit,)
-    )
+    cursor.execute("SELECT * FROM experiments ORDER BY timestamp ASC LIMIT ?", (limit,))
     rows = cursor.fetchall()
     conn.close()
     return [row_to_record(r) for r in rows]
 
 
-def get_experiment(run_id_or_name: str, db_path: Optional[Path] = None) -> Optional[ExperimentRecord]:
+def get_experiment(
+    run_id_or_name: str, db_path: Path | None = None
+) -> ExperimentRecord | None:
     init_db(db_path)
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
@@ -152,7 +155,7 @@ def get_experiment(run_id_or_name: str, db_path: Optional[Path] = None) -> Optio
     return row_to_record(row) if row else None
 
 
-def get_latest_runs(db_path: Optional[Path] = None, n: int = 2) -> list[ExperimentRecord]:
+def get_latest_runs(db_path: Path | None = None, n: int = 2) -> list[ExperimentRecord]:
     init_db(db_path)
     conn = get_db_connection(db_path)
     cursor = conn.cursor()

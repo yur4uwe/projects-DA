@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
 import joblib
 import pandas as pd
 
@@ -10,7 +11,7 @@ from .explain import SalaryExplainer
 
 def predict_salary(
     candidate: dict[str, Any],
-    model_path: Optional[Path] = None,
+    model_path: Path | None = None,
     include_explanation: bool = True,
 ) -> dict[str, Any]:
     """Run salary prediction on a single candidate profile with optional SHAP attribution."""
@@ -22,7 +23,9 @@ def predict_salary(
         )
 
     if not model_path.exists():
-        raise FileNotFoundError(f"Model artifact not found at {model_path}. Train model first.")
+        raise FileNotFoundError(
+            f"Model artifact not found at {model_path}. Train model first."
+        )
 
     pipeline = joblib.load(model_path)
 

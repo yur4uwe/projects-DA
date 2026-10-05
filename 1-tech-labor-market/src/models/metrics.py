@@ -1,8 +1,15 @@
 import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error, median_absolute_error, r2_score
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    median_absolute_error,
+    r2_score,
+)
 
 
-def compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
+def compute_regression_metrics(
+    y_true: np.ndarray, y_pred: np.ndarray
+) -> dict[str, float]:
     """Compute standard regression metrics on original scale (USD)."""
     # Ensure positive predictions for MAPE
     y_pred_clipped = np.clip(y_pred, 1.0, None)

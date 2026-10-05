@@ -1,4 +1,5 @@
 from typing import Any
+
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -51,7 +52,9 @@ def create_preprocessor(
         num_steps.append(("scaler", StandardScaler()))
 
     numeric_transformer = Pipeline(steps=num_steps)
-    categorical_transformer = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+    categorical_transformer = OneHotEncoder(
+        handle_unknown="ignore", sparse_output=False
+    )
 
     transformers = [
         ("num", numeric_transformer, num_cols),

@@ -1,21 +1,22 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
+
 import joblib
 import numpy as np
 import pandas as pd
 import shap
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 def clean_feature_name(name: str) -> str:
     """Format raw transformer column names into human-readable labels."""
-    if name.startswith("num__"):
-        name = name[5:]
-    elif name.startswith("cat__"):
+    if name.startswith(("num__", "cat__")):
         name = name[5:]
     elif name.startswith("skills__"):
         name = name[8:]
@@ -29,7 +30,7 @@ def clean_feature_name(name: str) -> str:
 class SalaryExplainer:
     """TreeSHAP explainability engine for the salary prediction pipeline."""
 
-    def __init__(self, pipeline_path: Optional[Path] = None):
+    def __init__(self, pipeline_path: Path | None = None):
         if pipeline_path is None:
             pipeline_path = (
                 Path(__file__).resolve().parent.parent.parent
@@ -100,7 +101,7 @@ class SalaryExplainer:
         }
 
     def compute_global_importance(
-        self, X_df: pd.DataFrame, output_path: Optional[Path] = None
+        self, X_df: pd.DataFrame, output_path: Path | None = None
     ) -> pd.DataFrame:
         """Compute mean absolute SHAP feature importance across the dataset."""
         if self.explainer is None:

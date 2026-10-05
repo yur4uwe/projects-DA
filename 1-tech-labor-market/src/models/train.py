@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
 import joblib
-import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 from sklearn.dummy import DummyRegressor
@@ -15,7 +15,9 @@ from sklearn.pipeline import Pipeline
 from .metrics import compute_regression_metrics
 from .pipeline import create_preprocessor, get_feature_columns
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,9 @@ def train_and_evaluate(
 ) -> dict[str, Any]:
     """Load labeled dataset, evaluate baselines vs LightGBM, and export the best model."""
     if not data_path.exists():
-        raise FileNotFoundError(f"Processed dataset not found at {data_path}. Run builder first.")
+        raise FileNotFoundError(
+            f"Processed dataset not found at {data_path}. Run builder first."
+        )
 
     df = pd.read_parquet(data_path)
     # Ensure target exists and is strictly valid
@@ -47,19 +51,34 @@ def train_and_evaluate(
     models: dict[str, Pipeline] = {
         "Dummy (Median)": Pipeline(
             steps=[
-                ("prep", create_preprocessor(num_cols, cat_cols, skill_cols, scale_numeric=False)),
+                (
+                    "prep",
+                    create_preprocessor(
+                        num_cols, cat_cols, skill_cols, scale_numeric=False
+                    ),
+                ),
                 ("model", DummyRegressor(strategy="median")),
             ]
         ),
         "Linear Regression (Ridge)": Pipeline(
             steps=[
-                ("prep", create_preprocessor(num_cols, cat_cols, skill_cols, scale_numeric=True)),
+                (
+                    "prep",
+                    create_preprocessor(
+                        num_cols, cat_cols, skill_cols, scale_numeric=True
+                    ),
+                ),
                 ("model", Ridge(alpha=10.0)),
             ]
         ),
         "LightGBM Regressor": Pipeline(
             steps=[
-                ("prep", create_preprocessor(num_cols, cat_cols, skill_cols, scale_numeric=False)),
+                (
+                    "prep",
+                    create_preprocessor(
+                        num_cols, cat_cols, skill_cols, scale_numeric=False
+                    ),
+                ),
                 (
                     "model",
                     LGBMRegressor(
@@ -89,7 +108,9 @@ def train_and_evaluate(
             preds = cross_val_predict(pipe, X, y, cv=kf)
             metrics = compute_regression_metrics(y, preds)
             cv_results[name] = metrics
-            logger.info(f"[{name}] -> MAE: ${metrics['MAE']} | RMSE: ${metrics['RMSE']} | R2: {metrics['R2']}")
+            logger.info(
+                f"[{name}] -> MAE: ${metrics['MAE']} | RMSE: ${metrics['RMSE']} | R2: {metrics['R2']}"
+            )
         except Exception as exc:
             logger.warning(f"Failed CV for {name}: {exc}")
             cv_results[name] = {"MAE": float("inf"), "RMSE": float("inf"), "R2": -1.0}
@@ -98,7 +119,9 @@ def train_and_evaluate(
     trained_candidates = {k: v for k, v in models.items() if "Dummy" not in k}
     best_name = min(trained_candidates, key=lambda m: cv_results[m]["MAE"])
     best_pipeline = trained_candidates[best_name]
-    logger.info(f"Best performing predictive model: {best_name} (MAE: ${cv_results[best_name]['MAE']})")
+    logger.info(
+        f"Best performing predictive model: {best_name} (MAE: ${cv_results[best_name]['MAE']})"
+    )
 
     # Fit best model on entire dataset
     best_pipeline.fit(X, y)
@@ -112,7 +135,7 @@ def train_and_evaluate(
 
     metadata = {
         "best_model": best_name,
-        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "trained_at": datetime.now(UTC).isoformat(),
         "n_samples": n_samples,
         "n_splits": n_splits,
         "cv_metrics": cv_results,

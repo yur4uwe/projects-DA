@@ -1,10 +1,7 @@
 import argparse
-from datetime import datetime, timezone
-import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
-import uuid
 
 import numpy as np
 import pandas as pd
@@ -13,7 +10,6 @@ from sklearn.model_selection import KFold, cross_val_predict
 from .metrics import compute_regression_metrics
 from .pipeline import get_feature_columns
 from .registry import (
-    DEFAULT_DB_PATH,
     ExperimentRecord,
     get_experiment,
     init_db,
@@ -21,7 +17,9 @@ from .registry import (
     log_experiment,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +34,11 @@ HISTORICAL_MILESTONES = [
         "sample_size": 15,
         "cv_folds": 3,
         "feature_count": 84,
-        "features_used": ["experience_years", "seniority_level", "english_proficiency_rank"],
+        "features_used": [
+            "experience_years",
+            "seniority_level",
+            "english_proficiency_rank",
+        ],
         "mae": 2877.0,
         "rmse": 3410.0,
         "r2": -0.1200,
@@ -54,7 +56,12 @@ HISTORICAL_MILESTONES = [
         "sample_size": 49,
         "cv_folds": 5,
         "feature_count": 84,
-        "features_used": ["experience_years", "seniority_level", "num_skills", "category"],
+        "features_used": [
+            "experience_years",
+            "seniority_level",
+            "num_skills",
+            "category",
+        ],
         "mae": 2657.0,
         "rmse": 3120.0,
         "r2": 0.3200,
@@ -72,7 +79,13 @@ HISTORICAL_MILESTONES = [
         "sample_size": 388,
         "cv_folds": 5,
         "feature_count": 84,
-        "features_used": ["experience_years", "seniority_level", "num_skills", "num_cloud", "category"],
+        "features_used": [
+            "experience_years",
+            "seniority_level",
+            "num_skills",
+            "num_cloud",
+            "category",
+        ],
         "mae": 1137.62,
         "rmse": 2257.55,
         "r2": 0.3531,
@@ -90,7 +103,13 @@ HISTORICAL_MILESTONES = [
         "sample_size": 388,
         "cv_folds": 5,
         "feature_count": 84,
-        "features_used": ["experience_years", "seniority_level", "num_skills", "num_cloud", "category"],
+        "features_used": [
+            "experience_years",
+            "seniority_level",
+            "num_skills",
+            "num_cloud",
+            "category",
+        ],
         "mae": 1131.38,
         "rmse": 2263.70,
         "r2": 0.3495,
@@ -108,7 +127,13 @@ HISTORICAL_MILESTONES = [
         "sample_size": 388,
         "cv_folds": 5,
         "feature_count": 84,
-        "features_used": ["experience_years", "seniority_level", "num_skills", "num_cloud", "category"],
+        "features_used": [
+            "experience_years",
+            "seniority_level",
+            "num_skills",
+            "num_cloud",
+            "category",
+        ],
         "mae": 1099.35,
         "rmse": 2150.94,
         "r2": 0.4127,
@@ -155,7 +180,9 @@ def display_model_lineage() -> None:
     print("\n" + "=" * 88)
     print("           MODEL LINEAGE & EVOLUTION REPORT (TECH LABOR MARKET)")
     print("=" * 88)
-    print("Tracking the empirical progression of salary modeling from cold-start to production.\n")
+    print(
+        "Tracking the empirical progression of salary modeling from cold-start to production.\n"
+    )
 
     # 1. Summary Lineage Table
     headers = [
@@ -231,14 +258,18 @@ def display_model_lineage() -> None:
 
     for idx, r in enumerate(runs, 1):
         print(f"\n[{idx}] {r.name} ({r.timestamp[:10]})")
-        print(f"    Architecture: {r.model_name} | Target: {r.target_transform} | Sample Size: N={r.sample_size} | Features: {r.feature_count}")
-        print(f"    CV Performance: MAE=${r.mae:,.2f} | RMSE=${r.rmse:,.2f} | R2={r.r2:.4f} | MedAE=${r.medae:,.2f} | MAPE={r.mape:.1f}%")
+        print(
+            f"    Architecture: {r.model_name} | Target: {r.target_transform} | Sample Size: N={r.sample_size} | Features: {r.feature_count}"
+        )
+        print(
+            f"    CV Performance: MAE=${r.mae:,.2f} | RMSE=${r.rmse:,.2f} | R2={r.r2:.4f} | MedAE=${r.medae:,.2f} | MAPE={r.mape:.1f}%"
+        )
         print(f"    Summary: {r.description}")
 
     print("\n" + "=" * 88 + "\n")
 
 
-def record_current_model(description: str, name: Optional[str] = None) -> None:
+def record_current_model(description: str, name: str | None = None) -> None:
     """Benchmark current training pipeline in codebase and append as the latest milestone."""
     import joblib
 
@@ -247,7 +278,9 @@ def record_current_model(description: str, name: Optional[str] = None) -> None:
     model_path = project_root / "models" / "salary_model.joblib"
 
     if not data_path.exists():
-        raise FileNotFoundError(f"Processed dataset not found at {data_path}. Run feature builder first.")
+        raise FileNotFoundError(
+            f"Processed dataset not found at {data_path}. Run feature builder first."
+        )
 
     df = pd.read_parquet(data_path)
     df = df[df["salary_mid_usd"].notnull()].copy()
@@ -258,7 +291,9 @@ def record_current_model(description: str, name: Optional[str] = None) -> None:
     X = df[features_used]
 
     if not model_path.exists():
-        raise FileNotFoundError(f"Trained model not found at {model_path}. Train model first.")
+        raise FileNotFoundError(
+            f"Trained model not found at {model_path}. Train model first."
+        )
 
     pipeline = joblib.load(model_path)
 
@@ -266,7 +301,9 @@ def record_current_model(description: str, name: Optional[str] = None) -> None:
     actual_folds = min(5, n_samples) if n_samples >= 4 else 2
     kf = KFold(n_splits=actual_folds, shuffle=True, random_state=42)
 
-    logger.info(f"Running {actual_folds}-fold cross validation to record milestone snapshot...")
+    logger.info(
+        f"Running {actual_folds}-fold cross validation to record milestone snapshot..."
+    )
     preds = cross_val_predict(pipeline, X, y_true, cv=kf)
     preds = np.clip(preds, 50.0, None)
     metrics = compute_regression_metrics(y_true, preds)
@@ -277,11 +314,11 @@ def record_current_model(description: str, name: Optional[str] = None) -> None:
     existing = list_experiments()
     step_num = len(existing) + 1
     run_name = name or f"M{step_num}: Snapshot Iteration"
-    run_id = f"milestone_{step_num}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"milestone_{step_num}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
     record = ExperimentRecord(
         run_id=run_id,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         name=run_name,
         description=description,
         model_name=model_name,
@@ -329,7 +366,9 @@ def diff_two_milestones(id1: str, id2: str) -> None:
         ("R2 Score", r1.r2, r2.r2, True),
     ]
 
-    print(f"{'Metric':<12} | {'Baseline':<12} | {'Candidate':<12} | {'Delta':<12} | {'Delta %':<10} | {'Status'}")
+    print(
+        f"{'Metric':<12} | {'Baseline':<12} | {'Candidate':<12} | {'Delta':<12} | {'Delta %':<10} | {'Status'}"
+    )
     print("-" * 78)
     for m_label, v1, v2, higher_better in metrics_meta:
         diff = v2 - v1
@@ -337,19 +376,29 @@ def diff_two_milestones(id1: str, id2: str) -> None:
         sign = "+" if diff >= 0 else ""
         diff_s = f"{sign}{diff:,.2f}"
         pct_s = f"{sign}{pct:.1f}%"
-        status = "IMPROVED" if ((higher_better and diff > 0) or (not higher_better and diff < 0)) else "DEGRADED"
+        status = (
+            "IMPROVED"
+            if ((higher_better and diff > 0) or (not higher_better and diff < 0))
+            else "DEGRADED"
+        )
         if abs(diff) < 1e-4:
             status = "NEUTRAL"
-        print(f"{m_label:<12} | {v1:<12,.2f} | {v2:<12,.2f} | {diff_s:<12} | {pct_s:<10} | {status}")
+        print(
+            f"{m_label:<12} | {v1:<12,.2f} | {v2:<12,.2f} | {diff_s:<12} | {pct_s:<10} | {status}"
+        )
 
     print("-" * 78)
     s1, s2 = set(r1.features_used), set(r2.features_used)
     added = sorted(s2 - s1)
     removed = sorted(s1 - s2)
     if added:
-        print(f"  + Added Features ({len(added)}): {', '.join(added[:10])}{'...' if len(added) > 10 else ''}")
+        print(
+            f"  + Added Features ({len(added)}): {', '.join(added[:10])}{'...' if len(added) > 10 else ''}"
+        )
     if removed:
-        print(f"  - Removed Features ({len(removed)}): {', '.join(removed[:10])}{'...' if len(removed) > 10 else ''}")
+        print(
+            f"  - Removed Features ({len(removed)}): {', '.join(removed[:10])}{'...' if len(removed) > 10 else ''}"
+        )
     if not added and not removed:
         print("  Features: Identical feature sets")
     print("=" * 78 + "\n")

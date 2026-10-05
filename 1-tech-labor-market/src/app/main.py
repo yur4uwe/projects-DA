@@ -1,15 +1,20 @@
 import json
 from pathlib import Path
+import sys
 from typing import Any
+
+# Ensure project root is in sys.path when running via streamlit
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 from src.features.skills import SKILL_GROUPS
 from src.models.predict import predict_salary
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 MODEL_PATH = PROJECT_ROOT / "models" / "salary_model.joblib"
 METADATA_PATH = PROJECT_ROOT / "models" / "metadata.json"
 IMPORTANCE_PATH = PROJECT_ROOT / "models" / "global_feature_importance.json"
@@ -108,7 +113,9 @@ databases = st.sidebar.multiselect(
 
 frameworks = st.sidebar.multiselect(
     "Frameworks & Web",
-    sorted(list(SKILL_GROUPS["frontend"].keys()) + list(SKILL_GROUPS["backend"].keys())),
+    sorted(
+        list(SKILL_GROUPS["frontend"].keys()) + list(SKILL_GROUPS["backend"].keys())
+    ),
     default=["fastapi"] if "fastapi" in SKILL_GROUPS["backend"] else [],
 )
 
@@ -119,14 +126,16 @@ ai_data = st.sidebar.multiselect(
 )
 
 all_selected_skills = sorted(
-    list(set(languages + cloud_devops + databases + frameworks + ai_data))
+    set(languages + cloud_devops + databases + frameworks + ai_data)
 )
 
 # -------------------------------------------------------------
 # Inference Execution
 # -------------------------------------------------------------
 if not MODEL_PATH.exists():
-    st.error("Model artifact not found. Please train the model via `uv run python -m src.models.train`.")
+    st.error(
+        "Model artifact not found. Please train the model via `uv run python -m src.models.train`."
+    )
     st.stop()
 
 candidate_input = {
@@ -141,7 +150,9 @@ candidate_input = {
 }
 
 try:
-    prediction = predict_salary(candidate_input, model_path=MODEL_PATH, include_explanation=True)
+    prediction = predict_salary(
+        candidate_input, model_path=MODEL_PATH, include_explanation=True
+    )
 except Exception as e:
     st.error(f"Inference error: {e}")
     st.stop()
@@ -185,7 +196,11 @@ with badge_cols[3]:
 
 # Tabs: Explainability, Skill Upskilling ROI, Market Intelligence
 tab_explain, tab_roi, tab_market = st.tabs(
-    ["Local SHAP Attribution", "Skill ROI & Upskilling Simulator", "Global Market Trends"]
+    [
+        "Local SHAP Attribution",
+        "Skill ROI & Upskilling Simulator",
+        "Global Market Trends",
+    ]
 )
 
 # -------------------------------------------------------------
@@ -208,22 +223,39 @@ with tab_explain:
         # Plotly horizontal bar chart of drivers
         driver_items = []
         for d in pos_drivers:
-            driver_items.append({"Feature": d["feature"], "Impact ($/mo)": d["contribution_usd"], "Type": "Positive"})
+            driver_items.append(
+                {
+                    "Feature": d["feature"],
+                    "Impact ($/mo)": d["contribution_usd"],
+                    "Type": "Positive",
+                }
+            )
         for d in neg_drivers:
-            driver_items.append({"Feature": d["feature"], "Impact ($/mo)": d["contribution_usd"], "Type": "Negative / Penalty"})
+            driver_items.append(
+                {
+                    "Feature": d["feature"],
+                    "Impact ($/mo)": d["contribution_usd"],
+                    "Type": "Negative / Penalty",
+                }
+            )
 
         if driver_items:
-            driver_df = pd.DataFrame(driver_items).sort_values("Impact ($/mo)", ascending=True)
+            driver_df = pd.DataFrame(driver_items).sort_values(
+                "Impact ($/mo)", ascending=True
+            )
             fig = px.bar(
                 driver_df,
                 x="Impact ($/mo)",
                 y="Feature",
                 color="Type",
                 orientation="h",
-                color_discrete_map={"Positive": "#2ecc71", "Negative / Penalty": "#e74c3c"},
+                color_discrete_map={
+                    "Positive": "#2ecc71",
+                    "Negative / Penalty": "#e74c3c",
+                },
                 title=f"Feature Dollar Attribution (Base Expected Salary: ${base_val:,.2f})",
             )
-            fig.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
+            fig.update_layout(height=400, margin={"l": 20, "r": 20, "t": 40, "b": 20})
             st.plotly_chart(fig, use_container_width=True)
 
         col_pos, col_neg = st.columns(2)
@@ -234,7 +266,9 @@ with tab_explain:
         with col_neg:
             st.markdown("**Top Negative / Below-Average Drivers**")
             for d in neg_drivers:
-                st.write(f"- **{d['feature']}**: -${abs(d['contribution_usd']):,.2f}/mo")
+                st.write(
+                    f"- **{d['feature']}**: -${abs(d['contribution_usd']):,.2f}/mo"
+                )
 
 # -------------------------------------------------------------
 # Tab 2: Skill ROI & Upskilling Simulator
@@ -269,7 +303,9 @@ with tab_roi:
     for extra_skill in unselected_skills:
         sim_candidate = dict(candidate_input)
         sim_candidate["skills"] = all_selected_skills + [extra_skill]
-        sim_res = predict_salary(sim_candidate, model_path=MODEL_PATH, include_explanation=False)
+        sim_res = predict_salary(
+            sim_candidate, model_path=MODEL_PATH, include_explanation=False
+        )
         delta = sim_res["predicted_monthly_usd"] - base_pred
         simulated_results.append(
             {
@@ -281,7 +317,9 @@ with tab_roi:
         )
 
     if simulated_results:
-        sim_df = pd.DataFrame(simulated_results).sort_values("Estimated Uplift ($/mo)", ascending=False)
+        sim_df = pd.DataFrame(simulated_results).sort_values(
+            "Estimated Uplift ($/mo)", ascending=False
+        )
         st.dataframe(
             sim_df.style.format(
                 {
@@ -306,18 +344,25 @@ with tab_market:
 
     importance_list = load_global_importance()
     if importance_list:
-        imp_df = pd.DataFrame(importance_list).head(15).sort_values("mean_abs_shap_usd", ascending=True)
+        imp_df = (
+            pd.DataFrame(importance_list)
+            .head(15)
+            .sort_values("mean_abs_shap_usd", ascending=True)
+        )
         fig_imp = px.bar(
             imp_df,
             x="mean_abs_shap_usd",
             y="feature",
             orientation="h",
-            labels={"mean_abs_shap_usd": "Mean Absolute Impact (USD/mo)", "feature": "Market Driver"},
+            labels={
+                "mean_abs_shap_usd": "Mean Absolute Impact (USD/mo)",
+                "feature": "Market Driver",
+            },
             title="Top 15 Market Salary Determinants",
             color="mean_abs_shap_usd",
             color_continuous_scale="Blues",
         )
-        fig_imp.update_layout(height=500, margin=dict(l=20, r=20, t=40, b=20))
+        fig_imp.update_layout(height=500, margin={"l": 20, "r": 20, "t": 40, "b": 20})
         st.plotly_chart(fig_imp, use_container_width=True)
     else:
         st.info("Global importance metadata not generated yet.")

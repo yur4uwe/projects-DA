@@ -1,6 +1,6 @@
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 # Ensure project root is in sys.path when running via streamlit
@@ -12,12 +12,20 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from src.features.skills import SKILL_GROUPS
+from src.features.skills import ALL_TECH_PATTERNS, SKILL_GROUPS
 from src.models.predict import predict_salary
 
+DATA_PATH = PROJECT_ROOT / "data" / "processed" / "salary_labeled_features.parquet"
 MODEL_PATH = PROJECT_ROOT / "models" / "salary_model.joblib"
 METADATA_PATH = PROJECT_ROOT / "models" / "metadata.json"
 IMPORTANCE_PATH = PROJECT_ROOT / "models" / "global_feature_importance.json"
+
+
+@st.cache_data
+def load_labeled_data() -> pd.DataFrame:
+    if DATA_PATH.exists():
+        return pd.read_parquet(DATA_PATH)
+    return pd.DataFrame()
 
 st.set_page_config(
     page_title="Tech Labor Market & Compensation Intelligence",
@@ -63,7 +71,7 @@ category_options = [
 selected_category = st.sidebar.selectbox("Primary Domain", category_options, index=0)
 
 exp_years = st.sidebar.slider(
-    "Years of Experience", min_value=0.0, max_value=15.0, value=4.0, step=0.5
+    "Years of Experience", min_value=0.0, max_value=15.0, value=1.0, step=0.5
 )
 
 seniority_map = {
@@ -256,7 +264,7 @@ with tab_explain:
                 title=f"Feature Dollar Attribution (Base Expected Salary: ${base_val:,.2f})",
             )
             fig.update_layout(height=400, margin={"l": 20, "r": 20, "t": 40, "b": 20})
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         col_pos, col_neg = st.columns(2)
         with col_pos:
@@ -274,64 +282,69 @@ with tab_explain:
 # Tab 2: Skill ROI & Upskilling Simulator
 # -------------------------------------------------------------
 with tab_roi:
-    st.subheader("Simulate Skill Addition & Estimated Salary Uplift")
+    st.subheader("Market Skill Premium & Upskilling Analysis")
     st.markdown(
-        "This tool evaluates skills currently missing from your profile and estimates the incremental monthly salary gain if you acquire them."
+        "Evaluates skills from the taxonomy that are missing from your profile, computing real market median compensation and estimated uplift from active job postings."
     )
 
-    unselected_skills = [
-        s
-        for s in [
-            "kubernetes",
-            "aws",
-            "terraform",
-            "go",
-            "kafka",
-            "postgresql",
-            "fastapi",
-            "react",
-            "spark",
-            "llm",
-            "rag",
-        ]
-        if s not in all_selected_skills
-    ]
-
-    simulated_results = []
-    base_pred = prediction["predicted_monthly_usd"]
-
-    for extra_skill in unselected_skills:
-        sim_candidate = dict(candidate_input)
-        sim_candidate["skills"] = all_selected_skills + [extra_skill]
-        sim_res = predict_salary(
-            sim_candidate, model_path=MODEL_PATH, include_explanation=False
-        )
-        delta = sim_res["predicted_monthly_usd"] - base_pred
-        simulated_results.append(
-            {
-                "Skill": extra_skill.upper(),
-                "New Monthly Salary ($)": sim_res["predicted_monthly_usd"],
-                "Estimated Uplift ($/mo)": delta,
-                "Annual Uplift ($/yr)": delta * 12.0,
-            }
-        )
-
-    if simulated_results:
-        sim_df = pd.DataFrame(simulated_results).sort_values(
-            "Estimated Uplift ($/mo)", ascending=False
-        )
-        st.dataframe(
-            sim_df.style.format(
-                {
-                    "New Monthly Salary ($)": "${:,.2f}",
-                    "Estimated Uplift ($/mo)": "+${:,.2f}",
-                    "Annual Uplift ($/yr)": "+${:,.2f}",
-                }
-            ),
-            use_container_width=True,
-        )
+    df_market = load_labeled_data()
+    if df_market.empty:
+        st.warning("Processed market dataset not found. Run feature builder to view empirical skill stats.")
     else:
-        st.info("You have already selected all evaluated high-impact skills.")
+        current_pred = prediction["predicted_monthly_usd"]
+        unselected = [s for s in sorted(ALL_TECH_PATTERNS.keys()) if s not in all_selected_skills]
+
+        roi_rows = []
+        for s in unselected:
+            col_name = f"skill_{s.replace('-', '_').replace('/', '_')}"
+            if col_name in df_market.columns:
+                sub = df_market[df_market[col_name] == 1]
+                count = len(sub)
+                if count >= 1:
+                    med_sal = float(sub["salary_mid_usd"].median())
+                    diff = med_sal - current_pred
+                    roi_rows.append(
+                        {
+                            "Skill": s.replace("_", " ").title(),
+                            "Active Postings (n)": count,
+                            "Market Median Salary ($/mo)": med_sal,
+                            "Estimated Delta ($/mo)": diff,
+                            "Annual Potential Delta ($/yr)": diff * 12.0,
+                        }
+                    )
+
+        if roi_rows:
+            roi_df = pd.DataFrame(roi_rows).sort_values("Estimated Delta ($/mo)", ascending=False)
+
+            # Interactive Plotly chart of top 10 upskilling opportunities
+            top_roi = roi_df.head(10).sort_values("Estimated Delta ($/mo)", ascending=True)
+            fig_roi = px.bar(
+                top_roi,
+                x="Estimated Delta ($/mo)",
+                y="Skill",
+                orientation="h",
+                color="Estimated Delta ($/mo)",
+                color_continuous_scale="Viridis",
+                title=f"Top 10 Upskilling Opportunities vs Current Estimate (${current_pred:,.2f}/mo)",
+                labels={"Estimated Delta ($/mo)": "Estimated Monthly Uplift ($/mo)"},
+            )
+            fig_roi.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_roi, width="stretch")
+
+            st.markdown("**Complete Market Comparison Table:**")
+            st.dataframe(
+                roi_df.style.format(
+                    {
+                        "Active Postings (n)": "{:d}",
+                        "Market Median Salary ($/mo)": "${:,.2f}",
+                        "Estimated Delta ($/mo)": lambda x: f"{'+' if x >= 0 else ''}${x:,.2f}",
+                        "Annual Potential Delta ($/yr)": lambda x: f"{'+' if x >= 0 else ''}${x:,.2f}",
+                    }
+                ),
+                width="stretch",
+            )
+        else:
+            st.info("You have selected all skills that appear in the current scraped dataset.")
 
 # -------------------------------------------------------------
 # Tab 3: Global Market Trends
@@ -363,7 +376,7 @@ with tab_market:
             color_continuous_scale="Blues",
         )
         fig_imp.update_layout(height=500, margin={"l": 20, "r": 20, "t": 40, "b": 20})
-        st.plotly_chart(fig_imp, use_container_width=True)
+        st.plotly_chart(fig_imp, width="stretch")
     else:
         st.info("Global importance metadata not generated yet.")
 

@@ -340,15 +340,30 @@ def record_current_model(description: str, name: str | None = None) -> None:
     display_model_lineage()
 
 
-def diff_two_milestones(id1: str, id2: str) -> None:
-    """Print side-by-side metric comparison between two specific milestones."""
-    r1 = get_experiment(id1)
-    r2 = get_experiment(id2)
+def diff_two_milestones(id1: str | None = None, id2: str | None = None) -> None:
+    """Print side-by-side metric comparison between two specific milestones (supports M1, M5, 1, 5, latest, prev)."""
+    ensure_history_seeded()
+    all_runs = list_experiments()
+    if len(all_runs) < 2:
+        print("At least two milestones are required to perform a diff.")
+        return
+
+    # Default: compare previous milestone against latest milestone
+    if id1 is None and id2 is None:
+        r1 = all_runs[-2]
+        r2 = all_runs[-1]
+    elif id2 is None:
+        r1 = get_experiment(id1)
+        r2 = all_runs[-1]
+    else:
+        r1 = get_experiment(id1)
+        r2 = get_experiment(id2)
+
     if not r1:
-        print(f"Error: Milestone '{id1}' not found in database.")
+        print(f"Error: Milestone '{id1}' not found. Use identifiers like M1, M2, latest, or full run ID.")
         return
     if not r2:
-        print(f"Error: Milestone '{id2}' not found in database.")
+        print(f"Error: Milestone '{id2}' not found. Use identifiers like M1, M2, latest, or full run ID.")
         return
 
     print("\n" + "=" * 78)
@@ -425,17 +440,23 @@ def main() -> None:
     )
     parser.add_argument(
         "--diff",
-        nargs=2,
-        metavar=("MILESTONE_A", "MILESTONE_B"),
-        help="Compare two milestones side-by-side by run_id or name",
+        nargs="*",
+        default=None,
+        metavar="MILESTONE",
+        help="Diff milestones by step tag (e.g. M1 M5, or M2, or empty for prev vs latest)",
     )
 
     args = parser.parse_args()
 
     if args.record:
         record_current_model(description=args.record, name=args.name)
-    elif args.diff:
-        diff_two_milestones(args.diff[0], args.diff[1])
+    elif args.diff is not None:
+        if len(args.diff) == 0:
+            diff_two_milestones(None, None)
+        elif len(args.diff) == 1:
+            diff_two_milestones(args.diff[0], None)
+        else:
+            diff_two_milestones(args.diff[0], args.diff[1])
     else:
         display_model_lineage()
 

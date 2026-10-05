@@ -141,18 +141,41 @@ def list_experiments(
 
 
 def get_experiment(
-    run_id_or_name: str, db_path: Path | None = None
+    identifier: str, db_path: Path | None = None
 ) -> ExperimentRecord | None:
     init_db(db_path)
-    conn = get_db_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM experiments WHERE run_id = ? OR name = ? ORDER BY timestamp DESC LIMIT 1",
-        (run_id_or_name, run_id_or_name),
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return row_to_record(row) if row else None
+    all_runs = list_experiments(db_path)
+    if not all_runs:
+        return None
+
+    clean_id = identifier.strip().lower()
+
+    if clean_id in ("latest", "last"):
+        return all_runs[-1]
+    if clean_id in ("prev", "previous"):
+        return all_runs[-2] if len(all_runs) >= 2 else all_runs[0]
+
+    # Handle step tags: M1, m1, M2, 1, 2, etc.
+    if clean_id.startswith("m") and clean_id[1:].isdigit():
+        idx = int(clean_id[1:]) - 1
+        if 0 <= idx < len(all_runs):
+            return all_runs[idx]
+    if clean_id.isdigit():
+        idx = int(clean_id) - 1
+        if 0 <= idx < len(all_runs):
+            return all_runs[idx]
+
+    # Exact match on run_id or name (case-insensitive)
+    for r in all_runs:
+        if r.run_id.lower() == clean_id or r.name.lower() == clean_id:
+            return r
+
+    # Prefix or substring match on run_id or name
+    for r in all_runs:
+        if clean_id in r.run_id.lower() or clean_id in r.name.lower():
+            return r
+
+    return None
 
 
 def get_latest_runs(db_path: Path | None = None, n: int = 2) -> list[ExperimentRecord]:

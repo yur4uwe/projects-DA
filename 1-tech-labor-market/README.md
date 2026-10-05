@@ -48,9 +48,9 @@ docker run -p 8501:8501 tech-labor-market
 ---
 
 ## Status & Roadmap
-- [ ] Scraping pipeline setup
-- [ ] Data cleaning & text normalization
-- [ ] Feature extraction and encoding
-- [ ] Model training & baseline evaluation
-- [ ] Streamlit interface
-- [ ] Docker packaging
+- [x] Scraping pipeline setup (`requests`, JSON-LD / REST APIs, Djinni + RemoteOK)
+- [x] Data cleaning & text normalization (salary conversion, CEFR English, experience parsing)
+- [x] Feature extraction and encoding (taxonomy mapping, composite indicators, binary flags)
+- [x] Model training & baseline evaluation (Dummy median vs. Ridge vs. LightGBM L1, TreeSHAP)
+- [x] Streamlit interface (salary prediction, local SHAP waterfall, upskilling simulator)
+- [x] Docker packaging (`Dockerfile` with `uv`)

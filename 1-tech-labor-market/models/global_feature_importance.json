@@ -1,0 +1,127 @@
+[
+  {
+    "feature": "Experience Years",
+    "feature_raw": "num__experience_years",
+    "mean_abs_shap_usd": 2390.41
+  },
+  {
+    "feature": "Title Char Length",
+    "feature_raw": "num__title_char_length",
+    "mean_abs_shap_usd": 490.53
+  },
+  {
+    "feature": "Desc Word Count",
+    "feature_raw": "num__desc_word_count",
+    "mean_abs_shap_usd": 339.49
+  },
+  {
+    "feature": "Seniority Level",
+    "feature_raw": "num__seniority_level",
+    "mean_abs_shap_usd": 216.78
+  },
+  {
+    "feature": "Skill: Sql",
+    "feature_raw": "skills__skill_sql",
+    "mean_abs_shap_usd": 147.86
+  },
+  {
+    "feature": "Num Skills",
+    "feature_raw": "num__num_skills",
+    "mean_abs_shap_usd": 88.73
+  },
+  {
+    "feature": "English Proficiency Rank",
+    "feature_raw": "num__english_proficiency_rank",
+    "mean_abs_shap_usd": 60.3
+  },
+  {
+    "feature": "Flag: Remote",
+    "feature_raw": "num__is_remote",
+    "mean_abs_shap_usd": 40.46
+  },
+  {
+    "feature": "Num Cloud",
+    "feature_raw": "num__num_cloud",
+    "mean_abs_shap_usd": 36.31
+  },
+  {
+    "feature": "Num Languages",
+    "feature_raw": "num__num_languages",
+    "mean_abs_shap_usd": 25.99
+  },
+  {
+    "feature": "Skill: Python",
+    "feature_raw": "skills__skill_python",
+    "mean_abs_shap_usd": 16.99
+  },
+  {
+    "feature": "Num Data Ml",
+    "feature_raw": "num__num_data_ml",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Num Genai",
+    "feature_raw": "num__num_genai",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Num Frontend",
+    "feature_raw": "num__num_frontend",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Num Backend",
+    "feature_raw": "num__num_backend",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Flag: Fullstack",
+    "feature_raw": "num__is_fullstack",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Num Mobile",
+    "feature_raw": "num__num_mobile",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Flag: Ai Ml",
+    "feature_raw": "num__is_ai_ml",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Flag: Cloud Native",
+    "feature_raw": "num__is_cloud_native",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Flag: Devops Oriented",
+    "feature_raw": "num__is_devops_oriented",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Category Account Manager",
+    "feature_raw": "cat__category_Account Manager",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Num Databases",
+    "feature_raw": "num__num_databases",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Num Devops",
+    "feature_raw": "num__num_devops",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Category Data Engineer",
+    "feature_raw": "cat__category_Data Engineer",
+    "mean_abs_shap_usd": 0.0
+  },
+  {
+    "feature": "Category Data Science",
+    "feature_raw": "cat__category_Data Science",
+    "mean_abs_shap_usd": 0.0
+  }
+]

@@ -1,3 +1,4 @@
+from .explain import SalaryExplainer
 from .metrics import compute_regression_metrics
 from .pipeline import CATEGORICAL_COLS, CORE_NUMERICAL_COLS, create_preprocessor, get_feature_columns
 from .predict import predict_salary
@@ -11,4 +12,5 @@ __all__ = [
     "CATEGORICAL_COLS",
     "train_and_evaluate",
     "predict_salary",
+    "SalaryExplainer",
 ]

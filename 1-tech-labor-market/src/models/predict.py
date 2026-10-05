@@ -5,15 +5,21 @@ import joblib
 import pandas as pd
 
 from ..features.composites import compute_skill_composites
+from .explain import SalaryExplainer
 
 
 def predict_salary(
     candidate: dict[str, Any],
     model_path: Optional[Path] = None,
+    include_explanation: bool = True,
 ) -> dict[str, Any]:
-    """Run salary prediction on a single candidate feature profile."""
+    """Run salary prediction on a single candidate profile with optional SHAP attribution."""
     if model_path is None:
-        model_path = Path(__file__).resolve().parent.parent.parent / "models" / "salary_model.joblib"
+        model_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "models"
+            / "salary_model.joblib"
+        )
 
     if not model_path.exists():
         raise FileNotFoundError(f"Model artifact not found at {model_path}. Train model first.")
@@ -43,10 +49,9 @@ def predict_salary(
 
     # 3. Model inference
     pred_val = float(pipeline.predict(input_df)[0])
-    # Sanity clip to reasonable bounds
     predicted_monthly_usd = max(500.0, round(pred_val, 2))
 
-    return {
+    response: dict[str, Any] = {
         "predicted_monthly_usd": predicted_monthly_usd,
         "estimated_annual_usd": round(predicted_monthly_usd * 12.0, 2),
         "range_p10_usd": round(predicted_monthly_usd * 0.85, 2),
@@ -56,3 +61,14 @@ def predict_salary(
         "is_cloud_native": bool(comp_dict.get("is_cloud_native", 0)),
         "is_ai_ml": bool(comp_dict.get("is_ai_ml", 0)),
     }
+
+    # 4. Optional SHAP attribution breakdown
+    if include_explanation:
+        try:
+            explainer = SalaryExplainer(pipeline_path=model_path)
+            exp_data = explainer.explain_candidate(input_df, top_n=5)
+            response["explanation"] = exp_data
+        except Exception as exc:
+            response["explanation"] = {"error": f"SHAP explanation failed: {exc}"}
+
+    return response

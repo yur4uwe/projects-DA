@@ -54,3 +54,15 @@ docker run -p 8501:8501 tech-labor-market
 - [x] Model training & baseline evaluation (Dummy median vs. Ridge vs. LightGBM L1, TreeSHAP)
 - [x] Streamlit interface (salary prediction, local SHAP waterfall, upskilling simulator)
 - [x] Docker packaging (`Dockerfile` with `uv`)
+
+---
+
+## Future Plans
+
+- **Geography Arbitrage:** Encode US vs. EU vs. domestic contract flags to capture regional compensation differentials.
+- **Outlier Trimming:** Filter extreme top 2.5% contracts (>$10k/mo) to eliminate residual skew on standard market roles.
+- **Company Domain Signals:** Encode sector tags (Fintech, Crypto, Gaming, Outstaff) to capture domain wage premiums.
+- **Skill Synergy Interactions:** Add cross-product composite flags (`Cloud + DevOps`, `Go + Kafka`, `React + Node`) for tech stack bundle premiums.
+- **TF-IDF / Text Embeddings:** Extract TruncatedSVD components from job descriptions to capture architectural responsibility beyond regex tokens.
+- **Temporal Scraping Automation:** Schedule recurring ingestion runs to accumulate 1,000+ records and track salary inflation over time.
+

@@ -27,6 +27,7 @@ def load_labeled_data() -> pd.DataFrame:
         return pd.read_parquet(DATA_PATH)
     return pd.DataFrame()
 
+
 st.set_page_config(
     page_title="Tech Labor Market & Compensation Intelligence",
     layout="wide",
@@ -282,17 +283,22 @@ with tab_explain:
 # Tab 2: Skill ROI & Upskilling Simulator
 # -------------------------------------------------------------
 with tab_roi:
-    st.subheader("Market Skill Premium & Upskilling Analysis")
+    st.subheader("Skill ROI & Upskilling Simulator")
     st.markdown(
-        "Evaluates skills from the taxonomy that are missing from your profile, computing real market median compensation and estimated uplift from active job postings."
+        "Compare the **Controlled Model Uplift** (marginal salary gain if you acquire a skill, holding your experience and seniority constant) "
+        "versus the **Raw Market Postings Benchmark** (average salary of all market vacancies requiring that skill)."
     )
 
     df_market = load_labeled_data()
     if df_market.empty:
-        st.warning("Processed market dataset not found. Run feature builder to view empirical skill stats.")
+        st.warning(
+            "Processed market dataset not found. Run feature builder to view empirical skill stats."
+        )
     else:
         current_pred = prediction["predicted_monthly_usd"]
-        unselected = [s for s in sorted(ALL_TECH_PATTERNS.keys()) if s not in all_selected_skills]
+        unselected = [
+            s for s in sorted(ALL_TECH_PATTERNS.keys()) if s not in all_selected_skills
+        ]
 
         roi_rows = []
         for s in unselected:
@@ -300,51 +306,87 @@ with tab_roi:
             if col_name in df_market.columns:
                 sub = df_market[df_market[col_name] == 1]
                 count = len(sub)
-                if count >= 1:
+                if count >= 2:
+                    # 1. Model counterfactual prediction (ceteris paribus)
+                    sim_cand = dict(candidate_input)
+                    sim_cand["skills"] = list(all_selected_skills) + [s]
+                    try:
+                        sim_pred = predict_salary(
+                            sim_cand, model_path=MODEL_PATH, include_explanation=False
+                        )
+                        controlled_delta = (
+                            sim_pred["predicted_monthly_usd"] - current_pred
+                        )
+                    except Exception:
+                        controlled_delta = 0.0
+
                     med_sal = float(sub["salary_mid_usd"].median())
-                    diff = med_sal - current_pred
+                    raw_diff = med_sal - current_pred
                     roi_rows.append(
                         {
                             "Skill": s.replace("_", " ").title(),
                             "Active Postings (n)": count,
-                            "Market Median Salary ($/mo)": med_sal,
-                            "Estimated Delta ($/mo)": diff,
-                            "Annual Potential Delta ($/yr)": diff * 12.0,
+                            "Model Controlled Uplift ($/mo)": controlled_delta,
+                            "Controlled Annual Uplift ($/yr)": controlled_delta * 12.0,
+                            "Postings Median Salary ($/mo)": med_sal,
+                            "Raw Market Delta ($/mo)": raw_diff,
                         }
                     )
 
         if roi_rows:
-            roi_df = pd.DataFrame(roi_rows).sort_values("Estimated Delta ($/mo)", ascending=False)
+            roi_df = pd.DataFrame(roi_rows).sort_values(
+                "Model Controlled Uplift ($/mo)", ascending=False
+            )
 
-            # Interactive Plotly chart of top 10 upskilling opportunities
-            top_roi = roi_df.head(10).sort_values("Estimated Delta ($/mo)", ascending=True)
+            top_controlled = roi_df.head(10).sort_values(
+                "Model Controlled Uplift ($/mo)", ascending=True
+            )
             fig_roi = px.bar(
-                top_roi,
-                x="Estimated Delta ($/mo)",
+                top_controlled,
+                x="Model Controlled Uplift ($/mo)",
                 y="Skill",
                 orientation="h",
-                color="Estimated Delta ($/mo)",
-                color_continuous_scale="Viridis",
-                title=f"Top 10 Upskilling Opportunities vs Current Estimate (${current_pred:,.2f}/mo)",
-                labels={"Estimated Delta ($/mo)": "Estimated Monthly Uplift ($/mo)"},
+                color="Model Controlled Uplift ($/mo)",
+                color_continuous_scale="Teal",
+                title=f"Top 10 Controlled Upskilling Gains for Your Profile (Base: ${current_pred:,.2f}/mo)",
+                labels={
+                    "Model Controlled Uplift ($/mo)": "Controlled Marginal Uplift ($/mo)"
+                },
             )
-            fig_roi.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
+            fig_roi.update_layout(
+                height=400, margin={"l": 20, "r": 20, "t": 40, "b": 20}
+            )
             st.plotly_chart(fig_roi, width="stretch")
 
-            st.markdown("**Complete Market Comparison Table:**")
+            st.markdown(
+                "> **Note on Differences:**\n"
+                "> - **Controlled Model Uplift:** Reflects the pure marginal value of the skill holding your current years of experience, seniority, and English constant.\n"
+                "> - **Postings Median Salary:** Shows the raw compensation across all vacancies mentioning that skill, which often conflates higher years of experience, leadership roles, or foreign remote contracts."
+            )
+
+            st.markdown("**Complete Upskilling Opportunity Matrix:**")
             st.dataframe(
                 roi_df.style.format(
                     {
                         "Active Postings (n)": "{:d}",
-                        "Market Median Salary ($/mo)": "${:,.2f}",
-                        "Estimated Delta ($/mo)": lambda x: f"{'+' if x >= 0 else ''}${x:,.2f}",
-                        "Annual Potential Delta ($/yr)": lambda x: f"{'+' if x >= 0 else ''}${x:,.2f}",
+                        "Model Controlled Uplift ($/mo)": lambda x: (
+                            f"{'+' if x >= 0 else ''}${x:,.2f}"
+                        ),
+                        "Controlled Annual Uplift ($/yr)": lambda x: (
+                            f"{'+' if x >= 0 else ''}${x:,.2f}"
+                        ),
+                        "Postings Median Salary ($/mo)": "${:,.2f}",
+                        "Raw Market Delta ($/mo)": lambda x: (
+                            f"{'+' if x >= 0 else ''}${x:,.2f}"
+                        ),
                     }
                 ),
                 width="stretch",
             )
         else:
-            st.info("You have selected all skills that appear in the current scraped dataset.")
+            st.info(
+                "You have selected all skills that appear in the current scraped dataset."
+            )
 
 # -------------------------------------------------------------
 # Tab 3: Global Market Trends

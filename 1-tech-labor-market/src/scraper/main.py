@@ -29,6 +29,12 @@ def run():
         help="Max pages to scrape for Djinni (default: 2)",
     )
     parser.add_argument(
+        "--has-salary",
+        action="store_true",
+        default=False,
+        help="Filter Djinni to vacancies with explicit public salary (editorial=has_public_salary)",
+    )
+    parser.add_argument(
         "--remoteok-limit",
         type=int,
         default=50,
@@ -43,9 +49,12 @@ def run():
 
     # 1. Djinni Ingestion
     if args.source in ("djinni", "all"):
-        logger.info(f"--- Running Djinni Ingestion (max_pages={args.pages}) ---")
+        logger.info(f"--- Running Djinni Ingestion (max_pages={args.pages}, has_salary={args.has_salary}) ---")
         djinni_records = []
-        for page_records in scrape_djinni_pages(max_pages=args.pages):
+        extra_params = {}
+        if args.has_salary:
+            extra_params["editorial"] = "has_public_salary"
+        for page_records in scrape_djinni_pages(max_pages=args.pages, extra_params=extra_params if extra_params else None):
             djinni_records.extend(page_records)
 
         if djinni_records:

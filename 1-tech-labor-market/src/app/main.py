@@ -212,10 +212,7 @@ tab_explain, tab_roi, tab_market = st.tabs(
     ]
 )
 
-# -------------------------------------------------------------
-# Tab 1: Local SHAP Attribution
-# -------------------------------------------------------------
-with tab_explain:
+def render_local_attribution_tab(prediction: dict[str, Any]) -> None:
     st.subheader("Why Did the Model Predict This Salary?")
     st.markdown(
         "TreeSHAP breaks down the prediction additively into the base market starting point and the exact dollar amount added or subtracted by each feature."
@@ -224,60 +221,68 @@ with tab_explain:
     exp_data = prediction.get("explanation", {})
     if "error" in exp_data:
         st.warning(exp_data["error"])
-    else:
-        base_val = exp_data.get("base_market_salary_usd", 0.0)
-        pos_drivers = exp_data.get("top_positive_drivers", [])
-        neg_drivers = exp_data.get("top_negative_drivers", [])
+        return
 
-        # Plotly horizontal bar chart of drivers
-        driver_items = []
+    base_val = exp_data.get("base_market_salary_usd", 0.0)
+    pos_drivers = exp_data.get("top_positive_drivers", [])
+    neg_drivers = exp_data.get("top_negative_drivers", [])
+
+    # Plotly horizontal bar chart of drivers
+    driver_items = []
+    for d in pos_drivers:
+        driver_items.append(
+            {
+                "Feature": d["feature"],
+                "Impact ($/mo)": d["contribution_usd"],
+                "Type": "Positive",
+            }
+        )
+    for d in neg_drivers:
+        driver_items.append(
+            {
+                "Feature": d["feature"],
+                "Impact ($/mo)": d["contribution_usd"],
+                "Type": "Negative / Penalty",
+            }
+        )
+
+    if driver_items:
+        driver_df = pd.DataFrame(driver_items).sort_values(
+            "Impact ($/mo)", ascending=True
+        )
+        fig = px.bar(
+            driver_df,
+            x="Impact ($/mo)",
+            y="Feature",
+            color="Type",
+            orientation="h",
+            color_discrete_map={
+                "Positive": "#2ecc71",
+                "Negative / Penalty": "#e74c3c",
+            },
+            title=f"Feature Dollar Attribution (Base Expected Salary: ${base_val:,.2f})",
+        )
+        fig.update_layout(height=400, margin={"l": 20, "r": 20, "t": 40, "b": 20})
+        st.plotly_chart(fig, width="stretch")
+
+    col_pos, col_neg = st.columns(2)
+    with col_pos:
+        st.markdown("**Top Positive Value Drivers**")
         for d in pos_drivers:
-            driver_items.append(
-                {
-                    "Feature": d["feature"],
-                    "Impact ($/mo)": d["contribution_usd"],
-                    "Type": "Positive",
-                }
-            )
+            st.write(f"+ **{d['feature']}**: +${d['contribution_usd']:,.2f}/mo")
+    with col_neg:
+        st.markdown("**Top Negative / Below-Average Drivers**")
         for d in neg_drivers:
-            driver_items.append(
-                {
-                    "Feature": d["feature"],
-                    "Impact ($/mo)": d["contribution_usd"],
-                    "Type": "Negative / Penalty",
-                }
+            st.write(
+                f"- **{d['feature']}**: -${abs(d['contribution_usd']):,.2f}/mo"
             )
 
-        if driver_items:
-            driver_df = pd.DataFrame(driver_items).sort_values(
-                "Impact ($/mo)", ascending=True
-            )
-            fig = px.bar(
-                driver_df,
-                x="Impact ($/mo)",
-                y="Feature",
-                color="Type",
-                orientation="h",
-                color_discrete_map={
-                    "Positive": "#2ecc71",
-                    "Negative / Penalty": "#e74c3c",
-                },
-                title=f"Feature Dollar Attribution (Base Expected Salary: ${base_val:,.2f})",
-            )
-            fig.update_layout(height=400, margin={"l": 20, "r": 20, "t": 40, "b": 20})
-            st.plotly_chart(fig, width="stretch")
 
-        col_pos, col_neg = st.columns(2)
-        with col_pos:
-            st.markdown("**Top Positive Value Drivers**")
-            for d in pos_drivers:
-                st.write(f"+ **{d['feature']}**: +${d['contribution_usd']:,.2f}/mo")
-        with col_neg:
-            st.markdown("**Top Negative / Below-Average Drivers**")
-            for d in neg_drivers:
-                st.write(
-                    f"- **{d['feature']}**: -${abs(d['contribution_usd']):,.2f}/mo"
-                )
+# -------------------------------------------------------------
+# Tab 1: Local SHAP Attribution
+# -------------------------------------------------------------
+with tab_explain:
+    render_local_attribution_tab(prediction)
 
 # -------------------------------------------------------------
 # Tab 2: Skill ROI & Upskilling Simulator

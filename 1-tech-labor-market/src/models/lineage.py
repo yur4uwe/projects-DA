@@ -71,7 +71,7 @@ HISTORICAL_MILESTONES = [
     },
     {
         "run_id": "milestone_3_targeted_crawl",
-        "timestamp": "2026-10-05T19:42:00+00:00",
+        "timestamp": "2026-10-05T16:42:00+00:00",
         "name": "M3: Targeted Salary Crawl",
         "description": "Applied Djinni editorial=has_public_salary query parameter across 25 pages, expanding labeled training sample by 8x from 49 to 388 rows. Error dropped by over 55%.",
         "model_name": "LIGHTGBM (L1)",
@@ -95,7 +95,7 @@ HISTORICAL_MILESTONES = [
     },
     {
         "run_id": "milestone_4_log_target",
-        "timestamp": "2026-10-05T20:14:00+00:00",
+        "timestamp": "2026-10-05T17:14:00+00:00",
         "name": "M4: Log-Salary Transformation",
         "description": "Modeled log-normal tech wage distribution using TransformedTargetRegressor(func=log1p). Prevented extreme high-earner contracts from skewing junior/mid predictions.",
         "model_name": "LIGHTGBM (LOG1P)",
@@ -119,7 +119,7 @@ HISTORICAL_MILESTONES = [
     },
     {
         "run_id": "milestone_5_ensemble",
-        "timestamp": "2026-10-05T20:14:30+00:00",
+        "timestamp": "2026-10-05T17:14:30+00:00",
         "name": "M5: Production Ensemble Blend",
         "description": "Blended Ridge (linear experience gradient, R2=0.41) and LightGBM (non-linear category and skill splits) on log1p salary. Achieved best overall MAE, RMSE, and R2 across all milestones.",
         "model_name": "ENSEMBLE (RIDGE+LGBM)",

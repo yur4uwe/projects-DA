@@ -20,5 +20,6 @@ class CleanedJobRecord:
     is_remote: int
     english_level: str | None
     english_proficiency_rank: int
+    role_family: str = "other"
     skills: list[str] = field(default_factory=list)
     description_cleaned: str = ""

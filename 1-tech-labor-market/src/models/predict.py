@@ -6,6 +6,7 @@ import joblib
 import pandas as pd
 
 from ..features.composites import compute_skill_composites
+from ..features.roles import extract_role_family
 from .explain import SalaryExplainer
 
 
@@ -36,14 +37,19 @@ def predict_salary(
     skill_flags = comp_dict.pop("flags")
     comp_dict.update(skill_flags)
 
+    cand_title = candidate.get("title", "Software Engineer")
+    cand_cat = str(candidate.get("category", "Python"))
+    role_fam = candidate.get("role_family") or extract_role_family(cand_title, cand_cat)
+
     # 2. Assemble candidate feature row
     candidate_row = {
         "experience_years": float(candidate.get("experience_years", 3.0)),
         "seniority_level": int(candidate.get("seniority_level", 2)),
         "english_proficiency_rank": int(candidate.get("english_proficiency_rank", 3)),
         "is_remote": int(candidate.get("is_remote", 1)),
-        "category": str(candidate.get("category", "Python")),
-        "title_char_length": len(candidate.get("title", "Software Engineer")),
+        "category": cand_cat,
+        "role_family": role_fam,
+        "title_char_length": len(cand_title),
         "desc_word_count": len(candidate.get("description", "").split()),
         **comp_dict,
     }

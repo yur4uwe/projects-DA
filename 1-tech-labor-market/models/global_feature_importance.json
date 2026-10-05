@@ -2,126 +2,126 @@
   {
     "feature": "Experience Years",
     "feature_raw": "num__experience_years",
-    "mean_abs_shap_usd": 838.01
+    "mean_abs_shap_usd": 630.83
   },
   {
     "feature": "Seniority Level",
     "feature_raw": "num__seniority_level",
-    "mean_abs_shap_usd": 177.15
-  },
-  {
-    "feature": "Desc Word Count",
-    "feature_raw": "num__desc_word_count",
-    "mean_abs_shap_usd": 111.5
+    "mean_abs_shap_usd": 207.89
   },
   {
     "feature": "Title Char Length",
     "feature_raw": "num__title_char_length",
-    "mean_abs_shap_usd": 89.33
+    "mean_abs_shap_usd": 65.53
   },
   {
-    "feature": "Num Skills",
-    "feature_raw": "num__num_skills",
-    "mean_abs_shap_usd": 65.11
-  },
-  {
-    "feature": "Category Support",
-    "feature_raw": "cat__category_Support",
-    "mean_abs_shap_usd": 45.72
+    "feature": "Desc Word Count",
+    "feature_raw": "num__desc_word_count",
+    "mean_abs_shap_usd": 58.04
   },
   {
     "feature": "Flag: Remote",
     "feature_raw": "num__is_remote",
-    "mean_abs_shap_usd": 39.48
+    "mean_abs_shap_usd": 49.56
+  },
+  {
+    "feature": "Role Family Backend Engineer",
+    "feature_raw": "cat__role_family_backend_engineer",
+    "mean_abs_shap_usd": 41.48
+  },
+  {
+    "feature": "Category Support",
+    "feature_raw": "cat__category_Support",
+    "mean_abs_shap_usd": 41.45
+  },
+  {
+    "feature": "Num Skills",
+    "feature_raw": "num__num_skills",
+    "mean_abs_shap_usd": 41.04
   },
   {
     "feature": "English Proficiency Rank",
     "feature_raw": "num__english_proficiency_rank",
-    "mean_abs_shap_usd": 29.92
+    "mean_abs_shap_usd": 39.49
+  },
+  {
+    "feature": "Role Family Sales Support",
+    "feature_raw": "cat__role_family_sales_support",
+    "mean_abs_shap_usd": 32.18
+  },
+  {
+    "feature": "Role Family Marketing Growth",
+    "feature_raw": "cat__role_family_marketing_growth",
+    "mean_abs_shap_usd": 22.9
+  },
+  {
+    "feature": "Role Family Qa Testing",
+    "feature_raw": "cat__role_family_qa_testing",
+    "mean_abs_shap_usd": 17.37
   },
   {
     "feature": "Num Cloud",
     "feature_raw": "num__num_cloud",
-    "mean_abs_shap_usd": 23.08
-  },
-  {
-    "feature": "Num Databases",
-    "feature_raw": "num__num_databases",
-    "mean_abs_shap_usd": 22.33
+    "mean_abs_shap_usd": 15.39
   },
   {
     "feature": "Category Lead Generation",
     "feature_raw": "cat__category_Lead Generation",
-    "mean_abs_shap_usd": 20.59
+    "mean_abs_shap_usd": 14.61
   },
   {
-    "feature": "Num Languages",
-    "feature_raw": "num__num_languages",
-    "mean_abs_shap_usd": 16.66
+    "feature": "Role Family Data Ai Ml",
+    "feature_raw": "cat__role_family_data_ai_ml",
+    "mean_abs_shap_usd": 13.22
   },
   {
-    "feature": "Category Social Media",
-    "feature_raw": "cat__category_Social Media",
-    "mean_abs_shap_usd": 15.14
-  },
-  {
-    "feature": "Category Sales",
-    "feature_raw": "cat__category_Sales",
-    "mean_abs_shap_usd": 14.93
+    "feature": "Skill: Nodejs",
+    "feature_raw": "skills__skill_nodejs",
+    "mean_abs_shap_usd": 11.76
   },
   {
     "feature": "Category Qa",
     "feature_raw": "cat__category_QA",
-    "mean_abs_shap_usd": 12.76
+    "mean_abs_shap_usd": 11.76
+  },
+  {
+    "feature": "Role Family Hr Recruiting",
+    "feature_raw": "cat__role_family_hr_recruiting",
+    "mean_abs_shap_usd": 11.47
   },
   {
     "feature": "Skill: Php",
     "feature_raw": "skills__skill_php",
-    "mean_abs_shap_usd": 11.47
+    "mean_abs_shap_usd": 11.38
   },
   {
-    "feature": "Skill: Aws",
-    "feature_raw": "skills__skill_aws",
-    "mean_abs_shap_usd": 9.69
+    "feature": "Role Family Other",
+    "feature_raw": "cat__role_family_other",
+    "mean_abs_shap_usd": 11.24
   },
   {
-    "feature": "Skill: Python",
-    "feature_raw": "skills__skill_python",
-    "mean_abs_shap_usd": 9.67
+    "feature": "Flag: Fullstack",
+    "feature_raw": "num__is_fullstack",
+    "mean_abs_shap_usd": 10.85
   },
   {
     "feature": "Category Head Chief",
     "feature_raw": "cat__category_Head Chief",
-    "mean_abs_shap_usd": 7.05
+    "mean_abs_shap_usd": 8.47
   },
   {
-    "feature": "Num Mobile",
-    "feature_raw": "num__num_mobile",
-    "mean_abs_shap_usd": 6.96
+    "feature": "Num Languages",
+    "feature_raw": "num__num_languages",
+    "mean_abs_shap_usd": 7.83
   },
   {
-    "feature": "Category Sales Manager",
-    "feature_raw": "cat__category_Sales Manager",
-    "mean_abs_shap_usd": 6.22
+    "feature": "Num Databases",
+    "feature_raw": "num__num_databases",
+    "mean_abs_shap_usd": 6.49
   },
   {
-    "feature": "Skill: Go",
-    "feature_raw": "skills__skill_go",
-    "mean_abs_shap_usd": 5.99
-  },
-  {
-    "feature": "Num Frontend",
-    "feature_raw": "num__num_frontend",
-    "mean_abs_shap_usd": 5.82
-  },
-  {
-    "feature": "Category Marketing",
-    "feature_raw": "cat__category_Marketing",
-    "mean_abs_shap_usd": 5.47
-  },
-  {
-    "feature": "Skill: Bigquery",
-    "feature_raw": "skills__skill_bigquery",
-    "mean_abs_shap_usd": 5.27
+    "feature": "Skill: Typescript",
+    "feature_raw": "skills__skill_typescript",
+    "mean_abs_shap_usd": 6.2
   }
 ]

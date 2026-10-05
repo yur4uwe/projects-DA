@@ -45,13 +45,33 @@ class SalaryExplainer:
         self.preprocessor = self.pipeline.named_steps["prep"]
         self.model = self.pipeline.named_steps["model"]
 
-        # Only Tree models (e.g. LightGBM) support TreeExplainer
-        if hasattr(self.model, "booster_"):
-            self.explainer = shap.TreeExplainer(self.model)
-            self.expected_value = float(np.ravel(self.explainer.expected_value)[0])
+        # Support standalone LightGBM, TransformedTargetRegressor, and VotingRegressor
+        underlying = self.model
+        self.is_log_transformed = False
+
+        if hasattr(underlying, "regressor_"):
+            self.is_log_transformed = True
+            underlying = underlying.regressor_
+        elif hasattr(underlying, "regressor"):
+            self.is_log_transformed = True
+            underlying = underlying.regressor
+
+        if hasattr(underlying, "named_estimators_") and "lgbm" in underlying.named_estimators_:
+            tree_model = underlying.named_estimators_["lgbm"]
+        elif hasattr(underlying, "booster_"):
+            tree_model = underlying
+        else:
+            tree_model = None
+
+        if tree_model and hasattr(tree_model, "booster_"):
+            self.explainer = shap.TreeExplainer(tree_model)
+            raw_ev = float(np.ravel(self.explainer.expected_value)[0])
+            self.expected_value = raw_ev
+            self.base_market_usd = float(np.expm1(raw_ev)) if self.is_log_transformed else raw_ev
         else:
             self.explainer = None
             self.expected_value = 0.0
+            self.base_market_usd = 0.0
 
     def explain_candidate(
         self, candidate_df: pd.DataFrame, top_n: int = 5
@@ -66,18 +86,33 @@ class SalaryExplainer:
 
         # Compute SHAP values
         shap_values = self.explainer.shap_values(X_trans)[0]
+        predicted_val = float(self.pipeline.predict(candidate_df)[0])
 
-        # Pair features with their dollar contributions
+        # Dollar attribution calculation
         contributions = []
-        for raw_name, val in zip(feature_names, shap_values):
-            if abs(val) > 0.01:
-                contributions.append(
-                    {
-                        "feature_raw": raw_name,
-                        "feature": clean_feature_name(raw_name),
-                        "contribution_usd": round(float(val), 2),
-                    }
-                )
+        if self.is_log_transformed:
+            delta_usd = predicted_val - self.base_market_usd
+            total_shap = float(np.sum(shap_values))
+            for raw_name, val in zip(feature_names, shap_values):
+                if abs(val) > 0.001:
+                    c_usd = delta_usd * (val / total_shap) if abs(total_shap) > 1e-6 else float(val)
+                    contributions.append(
+                        {
+                            "feature_raw": raw_name,
+                            "feature": clean_feature_name(raw_name),
+                            "contribution_usd": round(float(c_usd), 2),
+                        }
+                    )
+        else:
+            for raw_name, val in zip(feature_names, shap_values):
+                if abs(val) > 0.01:
+                    contributions.append(
+                        {
+                            "feature_raw": raw_name,
+                            "feature": clean_feature_name(raw_name),
+                            "contribution_usd": round(float(val), 2),
+                        }
+                    )
 
         # Sort by impact
         positive_drivers = sorted(
@@ -91,10 +126,8 @@ class SalaryExplainer:
             key=lambda x: x["contribution_usd"],
         )[:top_n]
 
-        predicted_val = float(self.pipeline.predict(candidate_df)[0])
-
         return {
-            "base_market_salary_usd": round(self.expected_value, 2),
+            "base_market_salary_usd": round(self.base_market_usd, 2),
             "predicted_salary_usd": round(predicted_val, 2),
             "top_positive_drivers": positive_drivers,
             "top_negative_drivers": negative_drivers,
@@ -111,7 +144,13 @@ class SalaryExplainer:
         feature_names = self.preprocessor.get_feature_names_out()
 
         shap_values = self.explainer.shap_values(X_trans)
-        mean_abs_shap = np.mean(np.abs(shap_values), axis=0)
+        mean_abs = np.mean(np.abs(shap_values), axis=0)
+
+        if self.is_log_transformed:
+            # Scale log-space SHAP effect into approximate USD impact
+            mean_abs_shap = self.base_market_usd * np.expm1(mean_abs)
+        else:
+            mean_abs_shap = mean_abs
 
         importance_df = pd.DataFrame(
             {

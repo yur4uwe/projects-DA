@@ -182,11 +182,15 @@ def get_english_rank(level: str | None) -> int:
     return ranks.get(level or "", 0)
 
 
+from .roles import extract_role_family
+
+
 def clean_record(raw: dict[str, Any]) -> CleanedJobRecord:
     """Transform a single raw ingested dictionary into a CleanedJobRecord."""
     title = raw.get("title", "").strip()
     raw_desc = raw.get("description", "")
     desc_cleaned = clean_html(raw_desc)
+    cat_raw = raw.get("category", "").strip()
 
     s_min, s_max, s_mid = normalize_salary(raw.get("base_salary", {}))
     exp_years, is_inferred = normalize_experience(
@@ -196,6 +200,7 @@ def clean_record(raw: dict[str, Any]) -> CleanedJobRecord:
     english = extract_english_level(desc_cleaned)
     english_rank = get_english_rank(english)
     skills = extract_skills(f"{title} {desc_cleaned}", raw.get("tags", []))
+    role_family = extract_role_family(title, cat_raw)
 
     location_type = raw.get("job_location_type", "")
     is_remote = (
@@ -210,7 +215,7 @@ def clean_record(raw: dict[str, Any]) -> CleanedJobRecord:
         id=str(raw.get("id", "")),
         source=raw.get("source", "unknown"),
         title=title,
-        category=raw.get("category", "").strip(),
+        category=cat_raw,
         hiring_organization=raw.get("hiring_organization", "").strip(),
         experience_years=exp_years,
         is_experience_inferred=is_inferred,
@@ -222,6 +227,7 @@ def clean_record(raw: dict[str, Any]) -> CleanedJobRecord:
         is_remote=is_remote,
         english_level=english,
         english_proficiency_rank=english_rank,
+        role_family=role_family,
         skills=skills,
         description_cleaned=desc_cleaned,
     )

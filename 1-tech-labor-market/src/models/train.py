@@ -5,9 +5,12 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
+from sklearn.compose import TransformedTargetRegressor
 from sklearn.dummy import DummyRegressor
+from sklearn.ensemble import VotingRegressor
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.pipeline import Pipeline
@@ -89,6 +92,41 @@ def train_and_evaluate(
                         min_child_samples=5,
                         random_state=42,
                         verbose=-1,
+                    ),
+                ),
+            ]
+        ),
+        "Production Ensemble (Ridge + LightGBM on log1p)": Pipeline(
+            steps=[
+                (
+                    "prep",
+                    create_preprocessor(
+                        num_cols, cat_cols, skill_cols, scale_numeric=True
+                    ),
+                ),
+                (
+                    "model",
+                    TransformedTargetRegressor(
+                        regressor=VotingRegressor(
+                            estimators=[
+                                ("ridge", Ridge(alpha=10.0, random_state=42)),
+                                (
+                                    "lgbm",
+                                    LGBMRegressor(
+                                        objective="regression_l1",
+                                        n_estimators=80,
+                                        learning_rate=0.05,
+                                        num_leaves=15,
+                                        min_child_samples=5,
+                                        random_state=42,
+                                        verbose=-1,
+                                    ),
+                                ),
+                            ],
+                            weights=[0.4, 0.6],
+                        ),
+                        func=np.log1p,
+                        inverse_func=np.expm1,
                     ),
                 ),
             ]

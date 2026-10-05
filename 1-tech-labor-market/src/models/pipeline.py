@@ -29,7 +29,7 @@ CORE_NUMERICAL_COLS = [
     "desc_word_count",
 ]
 
-CATEGORICAL_COLS = ["category"]
+CATEGORICAL_COLS = ["category", "role_family"]
 
 
 def get_feature_columns(df: pd.DataFrame) -> tuple[list[str], list[str], list[str]]:

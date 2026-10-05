@@ -1,6 +1,6 @@
 {
-  "best_model": "LightGBM Regressor",
-  "trained_at": "2026-10-05T16:42:19.818569+00:00",
+  "best_model": "Production Ensemble (Ridge + LightGBM on log1p)",
+  "trained_at": "2026-10-05T18:12:18.278757+00:00",
   "n_samples": 388,
   "n_splits": 5,
   "cv_metrics": {
@@ -12,18 +12,25 @@
       "R2": -0.0916
     },
     "Linear Regression (Ridge)": {
-      "MAE": 1255.5,
-      "RMSE": 2163.72,
-      "MedAE": 722.12,
-      "MAPE%": 71.1,
-      "R2": 0.4057
+      "MAE": 1270.91,
+      "RMSE": 2152.32,
+      "MedAE": 755.07,
+      "MAPE%": 72.76,
+      "R2": 0.412
     },
     "LightGBM Regressor": {
-      "MAE": 1137.62,
-      "RMSE": 2257.55,
-      "MedAE": 598.02,
-      "MAPE%": 52.25,
-      "R2": 0.3531
+      "MAE": 1120.54,
+      "RMSE": 2213.57,
+      "MedAE": 580.54,
+      "MAPE%": 52.68,
+      "R2": 0.378
+    },
+    "Production Ensemble (Ridge + LightGBM on log1p)": {
+      "MAE": 1081.49,
+      "RMSE": 2123.51,
+      "MedAE": 540.45,
+      "MAPE%": 49.02,
+      "R2": 0.4276
     }
   },
   "features": {
@@ -50,7 +57,8 @@
       "desc_word_count"
     ],
     "categorical": [
-      "category"
+      "category",
+      "role_family"
     ],
     "skills": [
       "skill_python",

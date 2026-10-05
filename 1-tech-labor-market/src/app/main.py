@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.features.roles import ROLE_FAMILY_CHOICES, ROLE_FAMILY_LABELS
 from src.features.skills import ALL_TECH_PATTERNS, SKILL_GROUPS
 from src.models.predict import predict_salary
 
@@ -69,7 +70,18 @@ category_options = [
     "Go",
     "Other",
 ]
-selected_category = st.sidebar.selectbox("Primary Domain", category_options, index=0)
+selected_category = st.sidebar.selectbox(
+    "Primary Tech Stack / Category", category_options, index=0
+)
+
+role_options = list(ROLE_FAMILY_CHOICES.keys())
+default_role_idx = (
+    role_options.index("Backend Engineer") if "Backend Engineer" in role_options else 0
+)
+selected_role_label = st.sidebar.selectbox(
+    "Role Discipline (Role Family)", role_options, index=default_role_idx
+)
+selected_role_key = ROLE_FAMILY_CHOICES[selected_role_label]
 
 exp_years = st.sidebar.slider(
     "Years of Experience", min_value=0.0, max_value=15.0, value=1.0, step=0.5
@@ -152,9 +164,10 @@ candidate_input = {
     "seniority_level": seniority_map[selected_seniority],
     "english_proficiency_rank": english_map[selected_english],
     "category": selected_category,
+    "role_family": selected_role_key,
     "is_remote": 1 if is_remote == "Remote" else 0,
     "skills": all_selected_skills,
-    "title": f"{selected_seniority} {selected_category} Engineer",
+    "title": f"{selected_seniority} {selected_role_label}",
     "description": "Standard market responsibilities and technical deliverables.",
 }
 
@@ -193,14 +206,16 @@ with col3:
 st.markdown("---")
 
 # Profile attributes badges
-badge_cols = st.columns(4)
+badge_cols = st.columns(5)
 with badge_cols[0]:
-    st.info(f"**Total Skills:** {len(all_selected_skills)}")
+    st.info(f"**Discipline:** {selected_role_label}")
 with badge_cols[1]:
-    st.info(f"**Cloud Native:** {'Yes' if prediction['is_cloud_native'] else 'No'}")
+    st.info(f"**Total Skills:** {len(all_selected_skills)}")
 with badge_cols[2]:
-    st.info(f"**Full Stack:** {'Yes' if prediction['is_fullstack'] else 'No'}")
+    st.info(f"**Cloud Native:** {'Yes' if prediction['is_cloud_native'] else 'No'}")
 with badge_cols[3]:
+    st.info(f"**Full Stack:** {'Yes' if prediction['is_fullstack'] else 'No'}")
+with badge_cols[4]:
     st.info(f"**AI / ML:** {'Yes' if prediction['is_ai_ml'] else 'No'}")
 
 # Tabs: Explainability, Skill Upskilling ROI, Market Intelligence
@@ -211,6 +226,7 @@ tab_explain, tab_roi, tab_market = st.tabs(
         "Global Market Trends",
     ]
 )
+
 
 def render_local_attribution_tab(prediction: dict[str, Any]) -> None:
     st.subheader("Why Did the Model Predict This Salary?")
@@ -273,9 +289,7 @@ def render_local_attribution_tab(prediction: dict[str, Any]) -> None:
     with col_neg:
         st.markdown("**Top Negative / Below-Average Drivers**")
         for d in neg_drivers:
-            st.write(
-                f"- **{d['feature']}**: -${abs(d['contribution_usd']):,.2f}/mo"
-            )
+            st.write(f"- **{d['feature']}**: -${abs(d['contribution_usd']):,.2f}/mo")
 
 
 # -------------------------------------------------------------
@@ -334,7 +348,8 @@ with tab_roi:
                                 "Skill": s.replace("_", " ").title(),
                                 "Active Postings (n)": count,
                                 "Model Controlled Uplift ($/mo)": controlled_delta,
-                                "Controlled Annual Uplift ($/yr)": controlled_delta * 12.0,
+                                "Controlled Annual Uplift ($/yr)": controlled_delta
+                                * 12.0,
                                 "Postings Median Salary ($/mo)": med_sal,
                                 "Raw Market Delta ($/mo)": raw_diff,
                             }
@@ -422,8 +437,9 @@ with tab_market:
             },
             title="Top 15 Market Salary Determinants",
             color="mean_abs_shap_usd",
-            color_continuous_scale="Blues",
+            color_continuous_scale="Viridis",
         )
+        fig_imp.update_traces(marker_line_color="#2c3e50", marker_line_width=1)
         fig_imp.update_layout(height=500, margin={"l": 20, "r": 20, "t": 40, "b": 20})
         st.plotly_chart(fig_imp, width="stretch")
     else:

@@ -123,10 +123,6 @@ class FeaturePipeline:
         return master_df
 
 
-def main() -> None:
+if __name__ == "__main__":
     pipeline = FeaturePipeline()
     pipeline.build_all()
-
-
-if __name__ == "__main__":
-    main()

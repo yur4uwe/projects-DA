@@ -3,9 +3,9 @@
 import numpy as np
 import pandas as pd
 
-from src.models.baseline import SeasonalPersistenceBaseline
-from src.models.metrics import calculate_metrics
-from src.models.registry import ModelRegistry
+from src.model.baseline import SeasonalPersistenceBaseline
+from src.model.metrics import calculate_metrics
+from src.model.registry import ModelRegistry
 
 
 def test_metrics_calculation() -> None:

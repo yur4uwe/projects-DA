@@ -8,7 +8,7 @@ from src.api.app import (
     state,
 )
 from src.api.models import ElasticityRequest, ForecastRequest
-from src.models.predict import simulate_promotional_campaign
+from src.model.predict import simulate_promotional_campaign
 
 
 @app.get("/health")  # noqa: F821

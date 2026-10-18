@@ -96,14 +96,10 @@ def run_pipeline(target_appids: list[int] | None = None) -> None:
     )
 
 
-def main() -> None:
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Steam Game Ingestion Pipeline")
     parser.add_argument("--appid", type=int, help="Ingest a specific Steam AppID")
     args = parser.parse_args()
 
     target = [args.appid] if args.appid else None
     run_pipeline(target)
-
-
-if __name__ == "__main__":
-    main()

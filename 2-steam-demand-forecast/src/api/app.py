@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.ingestion.sales_calendar import SteamSalesCalendar
 from src.ingestion.storage import IngestionStorage
-from src.models.registry import ModelRegistry
+from src.model.registry import ModelRegistry
 
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 MODELS_DIR = PROJECT_ROOT / "models"

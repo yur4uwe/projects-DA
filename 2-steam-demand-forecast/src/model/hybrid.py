@@ -5,7 +5,8 @@ import logging
 import numpy as np
 import pandas as pd
 from prophet import Prophet
-from src.models.lgbm_model import LightGBMDemandModel
+
+from src.model.lgbm_model import LightGBMDemandModel
 
 logger = logging.getLogger(__name__)
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)

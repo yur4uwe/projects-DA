@@ -25,7 +25,7 @@ flowchart TD
         PROMO_FEAT & CAL_FEAT & LAG_FEAT & ROLL_FEAT --> PARQUET["Processed Time-Series Parquet\n(data/processed/daily_features.parquet)"]
     end
 
-    subgraph MODEL ["3. Modeling & Lineage (src/models/)"]
+    subgraph MODEL ["3. Modeling & Lineage (src/model/)"]
         PARQUET --> TIME_SPLIT["Temporal Holdout Split\n(Sequential validation; zero lookahead)"]
         TIME_SPLIT --> M1["M1: 7-Day Seasonal Persistence Baseline"]
         TIME_SPLIT --> M2["M2: Regularized Autoregressive Ridge Regression"]
@@ -57,7 +57,7 @@ uv run python -m src.ingestion.runner
 uv run python -m src.features.builder
 
 # Train models and record lineage (M1 - M4)
-uv run python -m src.models.train
+uv run python -m src.model.train
 
 # Terminal 1: Launch FastAPI forecasting service (Port 8000)
 uv run python -m src.api.server
@@ -93,7 +93,7 @@ docker compose up
 ├── src/
 │   ├── ingestion/           # Steam API, SteamCharts scraper, sales calendar
 │   ├── features/            # Autoregressive lags, rolling windows, promo indicators
-│   ├── models/              # Prophet baseline, LightGBM, Hybrid, Registry & Lineage
+│   ├── model/              # Prophet baseline, LightGBM, Hybrid, Registry & Lineage
 │   └── app/                 # Streamlit decision studio
 ├── tests/                   # Ingestion, feature integrity, and model unit tests
 ├── Dockerfile

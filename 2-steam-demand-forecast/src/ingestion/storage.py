@@ -14,10 +14,10 @@ class IngestionStorage:
         self.raw_dir = Path(raw_dir)
         self.raw_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_metadata(self, appid: int, metadata: BaseModel | dict[str, Any]) -> Path:
+    def save_metadata(self, appid: int, metadata: BaseModel) -> Path:
         """Save game metadata as JSON."""
         target = self.raw_dir / f"{appid}_metadata.json"
-        data = metadata.model_dump() if isinstance(metadata, BaseModel) else metadata
+        data = metadata.model_dump()
         with target.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return target
@@ -30,14 +30,12 @@ class IngestionStorage:
         with target.open("r", encoding="utf-8") as f:
             return json.load(f)
 
-    def save_records_jsonl(
-        self, filename: str, records: list[BaseModel | dict[str, Any]]
-    ) -> Path:
+    def save_records_jsonl(self, filename: str, records: list[BaseModel]) -> Path:
         """Save a list of records as newline-delimited JSON (JSONL)."""
         target = self.raw_dir / filename
         with target.open("w", encoding="utf-8") as f:
             for r in records:
-                row = r.model_dump(mode="json") if isinstance(r, BaseModel) else r
+                row = r.model_dump(mode="json")
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
         return target
 

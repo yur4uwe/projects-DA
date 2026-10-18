@@ -59,14 +59,10 @@ uv run python -m src.features.builder
 # Train models and record lineage (M1 - M4)
 uv run python -m src.models.train
 
-# Option A: Decoupled Production Mode (Recommended - Zero UI Stutter)
 # Terminal 1: Launch FastAPI forecasting service (Port 8000)
 uv run python -m src.api.server
 
 # Terminal 2: Launch Streamlit decision studio (Port 8501)
-uv run streamlit run src/app/main.py
-
-# Option B: Standalone Mode (In-Process Fallback)
 uv run streamlit run src/app/main.py
 ```
 
@@ -77,11 +73,8 @@ uv add <package-name>
 
 ### Containerized Execution with Docker
 ```bash
-# Build Docker image
-docker build -t steam-demand-forecast .
-
 # Run container
-docker run -p 8501:8501 steam-demand-forecast
+docker compose up
 ```
 
 ---

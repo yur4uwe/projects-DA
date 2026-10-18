@@ -2,13 +2,21 @@
 
 import os
 from datetime import date, timedelta
-from typing import Any
 
-import httpx
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+from src.app.server_api import (
+    catalog,
+    execute_elasticity_simulation,
+    execute_forecast_simulation,
+    fetch_experiments,
+    fetch_feature_importances,
+    fetch_game_history,
+    query_api_health,
+)
 
 # -----------------------------------------------------------------------------
 # App Configuration
@@ -26,19 +34,6 @@ st.markdown(
     "Interactive frontend client consuming the dedicated **FastAPI Demand Forecasting Service** "
     "powered by the **Hybrid Prophet + LightGBM** architecture."
 )
-
-
-# -----------------------------------------------------------------------------
-# Strict API Service Health Check
-# -----------------------------------------------------------------------------
-def query_api_health() -> dict[str, Any] | None:
-    try:
-        resp = httpx.get(f"{API_URL}/health", timeout=1.5)
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception:
-        pass
-    return None
 
 
 health_data = query_api_health()
@@ -71,58 +66,6 @@ if not health_data:
     st.rerun()
     st.stop()
 
-
-# -----------------------------------------------------------------------------
-# API Client Functions
-# -----------------------------------------------------------------------------
-@st.cache_data(ttl=60)
-def fetch_catalog() -> list[dict[str, Any]]:
-    resp = httpx.get(f"{API_URL}/catalog", timeout=10.0)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def fetch_game_history(appid: int, limit: int = 60) -> pd.DataFrame:
-    resp = httpx.get(
-        f"{API_URL}/games/{appid}/history", params={"limit": limit}, timeout=10.0
-    )
-    resp.raise_for_status()
-    df = pd.DataFrame(resp.json())
-    if not df.empty:
-        df["date"] = pd.to_datetime(df["date"])
-    return df
-
-
-def execute_forecast_simulation(payload: dict[str, Any]) -> dict[str, Any]:
-    resp = httpx.post(f"{API_URL}/forecast", json=payload, timeout=30.0)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def execute_elasticity_simulation(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    resp = httpx.post(f"{API_URL}/elasticity", json=payload, timeout=30.0)
-    resp.raise_for_status()
-    return resp.json()
-
-
-@st.cache_data(ttl=60)
-def fetch_experiments() -> list[dict[str, Any]]:
-    resp = httpx.get(f"{API_URL}/experiments", timeout=5.0)
-    resp.raise_for_status()
-    return resp.json()
-
-
-@st.cache_data(ttl=60)
-def fetch_feature_importances() -> list[dict[str, Any]]:
-    resp = httpx.get(f"{API_URL}/models/importances", timeout=5.0)
-    resp.raise_for_status()
-    return resp.json()
-
-
-catalog = fetch_catalog()
-if not catalog:
-    st.error("No games returned from the forecasting API catalog.")
-    st.stop()
 
 # -----------------------------------------------------------------------------
 # Sidebar: Parameter Configuration Studio

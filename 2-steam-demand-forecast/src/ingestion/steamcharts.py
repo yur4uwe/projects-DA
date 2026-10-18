@@ -118,33 +118,34 @@ class SteamChartsClient:
 
         for row in table_rows:
             cols = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
-            if len(cols) >= 5:
-                # Clean HTML tags and entities
-                clean_cols = [
-                    re.sub(r"&#43;", "+", re.sub(r"<[^>]+>", "", c)).strip()
-                    for c in cols
-                ]
-                month_label = clean_cols[0]
-                if not month_label or "Month" in month_label:
-                    continue
+            if len(cols) < 5:
+                continue
 
-                def _parse_float(val: str) -> float:
-                    clean = re.sub(r"[^\d.-]", "", val)
-                    return float(clean) if clean and clean != "-" else 0.0
+            # Clean HTML tags and entities
+            clean_cols = [
+                re.sub(r"&#43;", "+", re.sub(r"<[^>]+>", "", c)).strip() for c in cols
+            ]
+            month_label = clean_cols[0]
+            if not month_label or "Month" in month_label:
+                continue
 
-                avg_p = _parse_float(clean_cols[1])
-                gain = _parse_float(clean_cols[2])
-                gain_pct = _parse_float(clean_cols[3])
-                peak_p = int(_parse_float(clean_cols[4]))
+            def _parse_float(val: str) -> float:
+                clean = re.sub(r"[^\d.-]", "", val)
+                return float(clean) if clean and clean != "-" else 0.0
 
-                records.append(
-                    MonthlyPlayerRecord(
-                        month_label=month_label,
-                        avg_players=avg_p,
-                        gain=gain,
-                        gain_percent=gain_pct,
-                        peak_players=peak_p,
-                    )
+            avg_p = _parse_float(clean_cols[1])
+            gain = _parse_float(clean_cols[2])
+            gain_pct = _parse_float(clean_cols[3])
+            peak_p = int(_parse_float(clean_cols[4]))
+
+            records.append(
+                MonthlyPlayerRecord(
+                    month_label=month_label,
+                    avg_players=avg_p,
+                    gain=gain,
+                    gain_percent=gain_pct,
+                    peak_players=peak_p,
                 )
+            )
 
         return records

@@ -1,0 +1,20 @@
+# Ignore virtual environment and python caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+
+# Ignore raw scraper payloads (only catalog.json is needed at runtime)
+data/raw/*
+!data/raw/catalog.json
+
+# Ignore uncompressed training CSVs (only processed parquet files are needed)
+data/processed/*.csv
+
+# Ignore local git and test artifacts
+.git/
+.gitignore
+tests/

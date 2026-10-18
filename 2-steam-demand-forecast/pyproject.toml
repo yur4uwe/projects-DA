@@ -1,0 +1,33 @@
+[project]
+name = "steam-demand-forecast"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.5",
+    "httpx>=0.28.1",
+    "joblib>=1.6.0",
+    "lightgbm>=4.7.0",
+    "numpy>=2.5.4",
+    "pandas>=3.0.6",
+    "plotly>=7.1.0",
+    "prophet>=1.5.0",
+    "pyarrow>=26.0.0",
+    "pydantic>=2.14.1",
+    "requests>=2.34.2",
+    "scikit-learn>=1.9.1",
+    "streamlit>=1.66.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501", "E402"]

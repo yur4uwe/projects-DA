@@ -51,9 +51,9 @@ venv.bak/
 !.env.example
 
 # Large Data files (track .gitkeep, ignore data dumps)
-data/raw/*
+**/data/raw/*
 !data/raw/.gitkeep
-data/processed/*
+**/data/processed/*
 !data/processed/.gitkeep
 *.csv
 *.parquet
@@ -62,7 +62,7 @@ data/processed/*
 *.tar.gz
 
 # Serialized models and large binaries (track .gitkeep)
-models/*
+**/models/*
 !models/.gitkeep
 *.pkl
 *.joblib
@@ -75,3 +75,4 @@ docker-compose.override.yml
 
 # Agents
 .agents/
+reports/

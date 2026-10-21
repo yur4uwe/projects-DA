@@ -51,14 +51,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     state.models.clear()
 
 
-app = FastAPI(
-    title="Steam Demand Forecasting API",
-    description="Dedicated asynchronous HTTP service offloading heavy Prophet + LightGBM recursive forecasting.",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-
 def _get_game_features(appid: int) -> pd.DataFrame:
     parquet_path = DATA_DIR / f"{appid}_features.parquet"
     if not parquet_path.exists():
@@ -68,3 +60,15 @@ def _get_game_features(appid: int) -> pd.DataFrame:
     df = pd.read_parquet(parquet_path)
     df["date"] = pd.to_datetime(df["date"])
     return df.sort_values("date").reset_index(drop=True)
+
+
+app = FastAPI(
+    title="Steam Demand Forecasting API",
+    description="Dedicated asynchronous HTTP service offloading heavy Prophet + LightGBM recursive forecasting.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+from src.api.endpoints import router
+
+app.include_router(router)

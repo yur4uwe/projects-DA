@@ -13,7 +13,7 @@ from src.model.metrics import calculate_metrics
 from src.model.registry import ModelRegistry
 from src.model.ridge_model import AutoregressiveRidgeModel
 
-logger = logging.getLogger("models.train")
+logger = logging.getLogger("model.train")
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )

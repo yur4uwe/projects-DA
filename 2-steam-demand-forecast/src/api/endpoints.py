@@ -1,17 +1,18 @@
 from typing import Any
 
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 
 from src.api.app import (
     _get_game_features,
-    app,
     state,
 )
 from src.api.models import ElasticityRequest, ForecastRequest
 from src.model.predict import simulate_promotional_campaign
 
+router = APIRouter()
 
-@app.get("/health")  # noqa: F821
+
+@router.get("/health")
 def health_check() -> dict[str, Any]:
     """Health check endpoint reporting service status and loaded model engines."""
     return {
@@ -22,20 +23,20 @@ def health_check() -> dict[str, Any]:
     }
 
 
-@app.get("/catalog")
+@router.get("/catalog")
 def get_catalog() -> list[dict[str, Any]]:
     """Return all ingested games with metadata."""
     return state.catalog
 
 
-@app.get("/experiments")
+@router.get("/experiments")
 def get_experiments() -> list[dict[str, Any]]:
     """Return experiment history and metrics from SQLite."""
     df = state.registry.list_experiments()
     return df.to_dict(orient="records")
 
 
-@app.get("/games/{appid}/history")
+@router.get("/games/{appid}/history")
 def get_game_history(appid: int, limit: int = 60) -> list[dict[str, Any]]:
     """Return recent historical player counts and rolling baseline for a game."""
     df = _get_game_features(appid)
@@ -52,7 +53,7 @@ def get_game_history(appid: int, limit: int = 60) -> list[dict[str, Any]]:
     return records
 
 
-@app.get("/models/importances")
+@router.get("/models/importances")
 def get_feature_importances() -> list[dict[str, Any]]:
     """Return top feature importances from the global GBDT model."""
     lgbm_model = state.models.get("lgbm")
@@ -62,7 +63,7 @@ def get_feature_importances() -> list[dict[str, Any]]:
     return []
 
 
-@app.post("/forecast")
+@router.post("/forecast")
 def predict_forecast(req: ForecastRequest) -> dict[str, Any]:
     """Execute multi-step recursive forecasting asynchronously outside the UI thread."""
     model_key = "hybrid" if "hybrid" in req.model_engine.lower() else "lgbm"
@@ -105,7 +106,7 @@ def predict_forecast(req: ForecastRequest) -> dict[str, Any]:
     }
 
 
-@app.post("/elasticity")
+@router.post("/elasticity")
 def compute_elasticity(req: ElasticityRequest) -> list[dict[str, Any]]:
     """Calculate promotional sensitivity curve across multiple discount thresholds."""
     model_key = "hybrid" if "hybrid" in req.model_engine.lower() else "lgbm"

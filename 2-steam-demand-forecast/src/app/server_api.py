@@ -1,10 +1,11 @@
+import os
 from typing import Any
 
 import httpx
 import pandas as pd
 import streamlit as st
 
-from src.app.main import API_URL
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
 # -----------------------------------------------------------------------------
@@ -65,9 +66,3 @@ def fetch_feature_importances() -> list[dict[str, Any]]:
     resp = httpx.get(f"{API_URL}/models/importances", timeout=5.0)
     resp.raise_for_status()
     return resp.json()
-
-
-catalog = fetch_catalog()
-if not catalog:
-    st.error("No games returned from the forecasting API catalog.")
-    st.stop()

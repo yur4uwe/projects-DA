@@ -1,17 +1,24 @@
 """Streamlit Frontend Client for Steam Indie Demand Forecasting API."""
 
-import os
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from src.app.server_api import (
-    catalog,
+    API_URL,
     execute_elasticity_simulation,
     execute_forecast_simulation,
+    fetch_catalog,
     fetch_experiments,
     fetch_feature_importances,
     fetch_game_history,
@@ -26,7 +33,6 @@ st.set_page_config(
     layout="wide",
 )
 
-API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000").rstrip("/")
 POLL_INTERVAL_SECONDS = 5
 
 st.title("Steam Indie Demand & Sales Scheduling Studio")
@@ -66,6 +72,7 @@ if not health_data:
     st.rerun()
     st.stop()
 
+catalog = fetch_catalog()
 
 # -----------------------------------------------------------------------------
 # Sidebar: Parameter Configuration Studio

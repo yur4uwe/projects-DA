@@ -78,6 +78,17 @@ class FeaturePipeline:
                 * (1.0 + elasticity_lift * weekend_boost)
             )
 
+        # Reconstruct organic post-sale gameplay tail (players installing and playing newly purchased copies)
+        tail_mask = is_interp & (with_promo["is_steam_sale"] == 0) & (with_promo["days_since_last_sale"].between(1, 7))
+        if tail_mask.any():
+            typical_elasticity = 0.50
+            tail_decay = 0.65 * np.exp(-with_promo.loc[tail_mask, "days_since_last_sale"] / 3.5)
+            weekend_tail = 1.0 + 0.15 * with_promo.loc[tail_mask, "is_weekend"]
+            with_promo.loc[tail_mask, "demand"] = (
+                with_promo.loc[tail_mask, "demand"]
+                * (1.0 + typical_elasticity * tail_decay * weekend_tail)
+            )
+
         # 4. Autoregressive lags (Listing 5 in syllabus)
         with_lags = create_lag_features(with_promo, target_col="demand", prefix="sales")
 

@@ -71,14 +71,27 @@ def simulate_promotional_campaign(
             default_discount_depth=active_discount,
         )
 
+        days_from_start = (f_date - promo_start).days
         if in_promo_window:
+            # Intra-sale lifecycle curve: Day 1 wishlist spike, Day 2 peak, mid-sale fatigue, last-day urgency
+            if sale_duration_days <= 3:
+                profile_factor = 1.15 if days_from_start == 0 else 1.0
+            elif days_from_start == 0:
+                profile_factor = 1.15  # Wishlist notification email rush
+            elif days_from_start == 1:
+                profile_factor = 1.25  # Day 2 storefront peak
+            elif days_from_start == sale_duration_days - 1:
+                profile_factor = 1.10  # Last-chance buying bump
+            else:
+                profile_factor = max(0.85, 1.05 - 0.05 * days_from_start)
+
             day_with_promo["is_steam_sale"] = 1
-            day_with_promo["discount_depth"] = discount_depth
+            day_with_promo["discount_depth"] = discount_depth * profile_factor
             if is_custom_event:
                 day_with_promo["sale_name"] = custom_event_name
             else:
                 day_with_promo["is_major_seasonal_sale"] = 1
-            day_with_promo["sale_day_index"] = (f_date - promo_start).days
+            day_with_promo["sale_day_index"] = days_from_start
             day_with_promo["days_since_last_sale"] = 0
         elif f_date > promo_end:
             days_since = (f_date - promo_end).days
@@ -89,18 +102,21 @@ def simulate_promotional_campaign(
                 )
             else:
                 day_with_promo["days_since_last_sale"] = float(days_since)
+
             day_with_promo["is_steam_sale"] = 0
-            day_with_promo["discount_depth"] = 0.0
+            # Post-sale gameplay tail: recently purchased copies are installed and played
+            tail_factor = 0.65 * np.exp(-days_since / 3.0)
+            day_with_promo["discount_depth"] = (
+                discount_depth * tail_factor if tail_factor > 0.05 else 0.0
+            )
 
         # Synchronize all derived promotional & interaction features
         base_p = float(hist.get("base_price", pd.Series([14.99])).iloc[-1])
         day_with_promo["effective_price"] = base_p * (1.0 - day_with_promo["discount_depth"])
-        day_with_promo["promo_x_discount"] = (
-            day_with_promo["is_steam_sale"] * day_with_promo["discount_depth"]
-        )
-        day_with_promo["promo_x_weekend"] = (
-            day_with_promo["is_steam_sale"] * day_with_promo["is_weekend"]
-        )
+        # Promo interaction retains dynamic intra-sale lifecycle and smooth post-sale gameplay tail
+        day_with_promo["promo_x_discount"] = day_with_promo["discount_depth"]
+        has_promo_lift = (day_with_promo["discount_depth"] > 0.0).astype(int)
+        day_with_promo["promo_x_weekend"] = has_promo_lift * day_with_promo["is_weekend"]
         day_with_promo["post_sale_decay_7d"] = np.exp(
             -day_with_promo["days_since_last_sale"].clip(0, 30) / 5.0
         )

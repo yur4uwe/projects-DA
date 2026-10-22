@@ -45,3 +45,19 @@ def test_api_forecast_endpoint() -> None:
         assert data["horizon_days"] == 7
         assert len(data["forecast_series"]) == 7
         assert data["peak_promo_ccu"] > 0
+
+
+def test_api_forecast_past_date_error() -> None:
+    with TestClient(app) as tc:
+        payload = {
+            "appid": 367520,
+            "horizon_days": 7,
+            "start_date": "2026-10-15",  # Before cutoff 2026-10-18
+            "discount_depth": 0.33,
+            "sale_duration_days": 4,
+            "is_custom_event": True,
+            "model_engine": "hybrid",
+        }
+        resp = tc.post("/forecast", json=payload)
+        assert resp.status_code == 400
+        assert "cannot be on or before historical cutoff date" in resp.json()["detail"]

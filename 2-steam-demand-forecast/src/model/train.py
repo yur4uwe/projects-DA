@@ -115,22 +115,17 @@ def train_eval_pipeline(
     # Milestone 4: Hybrid Prophet + LightGBM Ensemble (Listing 5 in syllabus)
     # -------------------------------------------------------------------------
     logger.info("Training M4: Hybrid Prophet + LightGBM Ensemble...")
-    # Train hybrid on flagship representative game (or per game) for decomposition
-    flagship_appid = 367520  # Hollow Knight
-    train_flagship = train_df[train_df["appid"] == flagship_appid].copy()
-    test_flagship = test_df[test_df["appid"] == flagship_appid].copy()
-
     m4 = HybridProphetLGBMModel(
         yearly_seasonality=True,
         weekly_seasonality=True,
-        lgb_n_estimators=300,
-        lgb_learning_rate=0.05,
+        lgb_n_estimators=400,
+        lgb_learning_rate=0.03,
     )
-    m4.fit(train_flagship, target_col="demand")
-    m4_preds = m4.predict(test_flagship)
-    m4_metrics = calculate_metrics(test_flagship["demand"], m4_preds)
+    m4.fit(train_df, target_col="demand")
+    m4_preds = m4.predict(test_df)
+    m4_metrics = calculate_metrics(test_df["demand"], m4_preds)
     logger.info(
-        f"M4 Metrics (Flagship) -> MAE: {m4_metrics['mae']}, WAPE: {m4_metrics['wape_percent']}%, RMSE: {m4_metrics['rmse']}, R2: {m4_metrics['r2']}"
+        f"M4 Metrics (Global) -> MAE: {m4_metrics['mae']}, WAPE: {m4_metrics['wape_percent']}%, RMSE: {m4_metrics['rmse']}, R2: {m4_metrics['r2']}"
     )
 
     registry.record_run(
@@ -141,9 +136,10 @@ def train_eval_pipeline(
             "yearly_seasonality": True,
             "weekly_seasonality": True,
             "changepoint_prior_scale": 0.05,
-            "lgb_n_estimators": 300,
+            "lgb_n_estimators": 400,
+            "lgb_learning_rate": 0.03,
         },
-        description="Hybrid Prophet baseline with weekly/yearly seasonality and external regressors + LightGBM residual correction.",
+        description="Hybrid Prophet baseline on macro normalized demand + LightGBM residual correction across catalog.",
     )
 
     # Export metadata and save production artifacts

@@ -1,5 +1,7 @@
+from datetime import date
 from typing import Any
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 from src.api.app import (
@@ -10,6 +12,7 @@ from src.api.models import ElasticityRequest, ForecastRequest
 from src.model.predict import simulate_promotional_campaign
 
 router = APIRouter()
+DATA_CUTOFF_DATE = date(2026, 10, 18)
 
 
 @router.get("/health")
@@ -66,6 +69,18 @@ def get_feature_importances() -> list[dict[str, Any]]:
 @router.post("/forecast")
 def predict_forecast(req: ForecastRequest) -> dict[str, Any]:
     """Execute multi-step recursive forecasting asynchronously outside the UI thread."""
+    if req.start_date:
+        parsed_start = (
+            pd.to_datetime(req.start_date).date()
+            if isinstance(req.start_date, str)
+            else req.start_date
+        )
+        if parsed_start <= DATA_CUTOFF_DATE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"start_date ({parsed_start}) cannot be on or before historical cutoff date ({DATA_CUTOFF_DATE}).",
+            )
+
     model_key = "hybrid" if "hybrid" in req.model_engine.lower() else "lgbm"
     if model_key not in state.models:
         raise HTTPException(
@@ -109,6 +124,18 @@ def predict_forecast(req: ForecastRequest) -> dict[str, Any]:
 @router.post("/elasticity")
 def compute_elasticity(req: ElasticityRequest) -> list[dict[str, Any]]:
     """Calculate promotional sensitivity curve across multiple discount thresholds."""
+    if req.start_date:
+        parsed_start = (
+            pd.to_datetime(req.start_date).date()
+            if isinstance(req.start_date, str)
+            else req.start_date
+        )
+        if parsed_start <= DATA_CUTOFF_DATE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"start_date ({parsed_start}) cannot be on or before historical cutoff date ({DATA_CUTOFF_DATE}).",
+            )
+
     model_key = "hybrid" if "hybrid" in req.model_engine.lower() else "lgbm"
     if model_key not in state.models:
         raise HTTPException(

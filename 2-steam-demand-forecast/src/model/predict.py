@@ -27,13 +27,24 @@ def simulate_promotional_campaign(
     hist = history_df.sort_values("date").copy()
     last_date = pd.to_datetime(hist["date"].iloc[-1]).date()
 
-    sim_start = start_date or (last_date + timedelta(days=1))
-    future_dates = [sim_start + timedelta(days=i) for i in range(horizon_days)]
+    if isinstance(start_date, str):
+        start_date = pd.to_datetime(start_date).date()
 
-    # 1. Determine promo schedule across future dates
-    sale_end = sim_start + timedelta(days=sale_duration_days - 1)
+    # The simulation timeline always starts immediately after historical data (unbroken continuity)
+    sim_start = last_date + timedelta(days=1)
+    promo_start = start_date if start_date and start_date >= sim_start else sim_start
+    promo_end = promo_start + timedelta(days=sale_duration_days - 1)
 
-    # Establish recent baseline demand (mean of last 14 days)
+    # When the sale is scheduled in the future, span through the lead-up gap plus horizon_days
+    if promo_start > sim_start:
+        lead_up_days = (promo_start - sim_start).days
+        total_horizon = lead_up_days + horizon_days
+    else:
+        total_horizon = horizon_days
+
+    future_dates = [sim_start + timedelta(days=i) for i in range(total_horizon)]
+
+    # Establish recent baseline demand (mean of last 14 days of history)
     recent_baseline = float(hist["demand"].iloc[-14:].mean())
 
     forecast_rows: list[dict[str, Any]] = []
@@ -43,7 +54,7 @@ def simulate_promotional_campaign(
 
     for idx, f_date in enumerate(future_dates):
         # Is the promo active on this day?
-        in_promo_window = sim_start <= f_date <= sale_end
+        in_promo_window = promo_start <= f_date <= promo_end
 
         # Base calendar features
         day_row = pd.DataFrame([{"date": pd.to_datetime(f_date)}])
@@ -63,10 +74,36 @@ def simulate_promotional_campaign(
         if in_promo_window:
             day_with_promo["is_steam_sale"] = 1
             day_with_promo["discount_depth"] = discount_depth
-            day_with_promo["sale_name"] = (
-                custom_event_name if is_custom_event else day_with_promo["sale_name"]
-            )
-            day_with_promo["sale_day_index"] = idx
+            if is_custom_event:
+                day_with_promo["sale_name"] = custom_event_name
+            else:
+                day_with_promo["is_major_seasonal_sale"] = 1
+            day_with_promo["sale_day_index"] = (f_date - promo_start).days
+            day_with_promo["days_since_last_sale"] = 0
+        elif f_date > promo_end:
+            days_since = (f_date - promo_end).days
+            if "days_since_last_sale" in day_with_promo:
+                day_with_promo["days_since_last_sale"] = min(
+                    float(day_with_promo["days_since_last_sale"].iloc[0]),
+                    float(days_since),
+                )
+            else:
+                day_with_promo["days_since_last_sale"] = float(days_since)
+            day_with_promo["is_steam_sale"] = 0
+            day_with_promo["discount_depth"] = 0.0
+
+        # Synchronize all derived promotional & interaction features
+        base_p = float(hist.get("base_price", pd.Series([14.99])).iloc[-1])
+        day_with_promo["effective_price"] = base_p * (1.0 - day_with_promo["discount_depth"])
+        day_with_promo["promo_x_discount"] = (
+            day_with_promo["is_steam_sale"] * day_with_promo["discount_depth"]
+        )
+        day_with_promo["promo_x_weekend"] = (
+            day_with_promo["is_steam_sale"] * day_with_promo["is_weekend"]
+        )
+        day_with_promo["post_sale_decay_7d"] = np.exp(
+            -day_with_promo["days_since_last_sale"].clip(0, 30) / 5.0
+        )
 
         # Compute dynamic autoregressive lags from sim_buffer
         past_demands = sim_buffer["demand"].values
@@ -142,7 +179,12 @@ def simulate_promotional_campaign(
     forecast_df = pd.DataFrame(forecast_rows)
 
     # 2. Analytical KPI calculation
-    peak_promo_ccu = float(forecast_df["predicted_ccu"].max())
+    promo_rows_df = forecast_df[forecast_df["is_promo_active"]]
+    peak_promo_ccu = (
+        float(promo_rows_df["predicted_ccu"].max())
+        if not promo_rows_df.empty
+        else float(forecast_df["predicted_ccu"].max())
+    )
     peak_surge_multiplier = round(peak_promo_ccu / max(recent_baseline, 1.0), 2)
     total_forecasted_player_days = float(forecast_df["predicted_ccu"].sum())
     total_baseline_player_days = float(recent_baseline * len(forecast_df))
@@ -155,11 +197,11 @@ def simulate_promotional_campaign(
     cooldown_compliant = True
     cooldown_note = "Compliant with Steam discount policy."
     if is_custom_event:
-        # Check if last sale was within 30 days
-        days_since = cal.evaluate_date(sim_start)["days_since_last_sale"]
+        # Check if promo_start is within 30 days of the last historical sale
+        days_since = cal.evaluate_date(promo_start)["days_since_last_sale"]
         if days_since < 30:
             cooldown_compliant = False
-            cooldown_note = f"Warning: Steam requires 30 days cooldown between custom discounts (only {days_since} days elapsed)."
+            cooldown_note = f"Warning: Steam requires 30 days cooldown between custom discounts (only {days_since} days elapsed at start of sale)."
 
     return {
         "forecast_df": forecast_df,
@@ -170,4 +212,5 @@ def simulate_promotional_campaign(
         "cooldown_compliant": cooldown_compliant,
         "cooldown_note": cooldown_note,
         "horizon_days": horizon_days,
+        "total_simulated_days": len(forecast_df),
     }

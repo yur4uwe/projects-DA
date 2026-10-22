@@ -198,12 +198,14 @@ class SteamSalesCalendar:
         if ev:
             day_index = (target_date - ev.start_date).days
             total_days = (ev.end_date - ev.start_date).days + 1
+            days_until_end = (ev.end_date - target_date).days
             return {
                 "is_steam_sale": 1,
                 "is_major_seasonal_sale": 1 if ev.sale_type == "major_seasonal" else 0,
                 "sale_name": ev.name,
                 "sale_day_index": day_index,
                 "sale_progress": (day_index + 1) / max(total_days, 1),
+                "days_until_sale_end": max(days_until_end, 0),
                 "days_since_last_sale": 0,
             }
 
@@ -219,6 +221,7 @@ class SteamSalesCalendar:
             "sale_name": "None",
             "sale_day_index": -1,
             "sale_progress": 0.0,
+            "days_until_sale_end": -1,
             "days_since_last_sale": min(days_since_last, 999),
         }
 

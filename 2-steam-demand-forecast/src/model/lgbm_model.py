@@ -14,13 +14,17 @@ class LightGBMDemandModel:
         "sales_lag_7",
         "sales_lag_14",
         "sales_lag_30",
+        "sales_rolling_3",
+        "sales_rolling_std_3",
         "sales_rolling_7",
         "sales_rolling_std_7",
         "sales_rolling_14",
         "sales_rolling_std_14",
         "sales_rolling_30",
         "sales_rolling_std_30",
+        "sales_momentum_3_7",
         "sales_momentum_7_30",
+        "sales_trend_3d",
         "day_of_week",
         "is_weekend",
         "month",
@@ -31,7 +35,10 @@ class LightGBMDemandModel:
         "is_steam_sale",
         "is_major_seasonal_sale",
         "sale_day_index",
+        "sale_progress",
+        "days_until_sale_end",
         "days_since_last_sale",
+        "storefront_exposure",
         "discount_depth",
         "effective_price",
         "post_sale_decay_7d",
@@ -55,10 +62,12 @@ class LightGBMDemandModel:
         log_transform: bool = True,
         clip_non_negative: bool = True,
         feature_cols: list[str] | None = None,
+        monotone_constraints: dict | str | None = None,
     ) -> None:
         self.log_transform = log_transform
         self.clip_non_negative = clip_non_negative
         self.feature_cols = feature_cols or self.DEFAULT_FEATURES
+        self.monotone_constraints = monotone_constraints
         self.model = lgb.LGBMRegressor(
             n_estimators=n_estimators,
             learning_rate=learning_rate,
@@ -66,6 +75,7 @@ class LightGBMDemandModel:
             feature_fraction=feature_fraction,
             bagging_fraction=bagging_fraction,
             bagging_freq=bagging_freq,
+            monotone_constraints=monotone_constraints,
             random_state=random_state,
             verbosity=-1,
         )

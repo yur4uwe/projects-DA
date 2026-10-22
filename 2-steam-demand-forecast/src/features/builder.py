@@ -8,6 +8,12 @@ import pandas as pd
 
 from src.features.calendar import create_calendar_features
 from src.features.cleaner import align_daily_series
+from src.features.constants import (
+    DEFAULT_ELASTICITY_EPSILON,
+    TAIL_DECAY_RATE,
+    TAIL_INITIAL_FACTOR,
+    WEEKEND_BOOST,
+)
 from src.features.lags import create_lag_features
 from src.features.promotions import create_promotional_features
 from src.features.rolling import create_rolling_features
@@ -70,24 +76,30 @@ class FeaturePipeline:
         is_interp = ~dates_s.isin(raw_dates)
         promo_mask = (with_promo["is_steam_sale"] == 1) & is_interp
         if promo_mask.any():
-            # Price elasticity lift (epsilon ~ 0.8) with weekend interaction
-            elasticity_lift = (1.0 - with_promo.loc[promo_mask, "discount_depth"]).pow(-0.8) - 1.0
-            weekend_boost = 1.0 + 0.15 * with_promo.loc[promo_mask, "is_weekend"]
+            # Price elasticity lift with weekend interaction and storefront ramp
+            elasticity_lift = (
+                1.0 - with_promo.loc[promo_mask, "discount_depth"]
+            ).pow(-DEFAULT_ELASTICITY_EPSILON) - 1.0
+            weekend_boost = 1.0 + WEEKEND_BOOST * with_promo.loc[promo_mask, "is_weekend"]
+            exposure = with_promo.loc[promo_mask, "storefront_exposure"]
             with_promo.loc[promo_mask, "demand"] = (
                 with_promo.loc[promo_mask, "demand"]
-                * (1.0 + elasticity_lift * weekend_boost)
+                * (1.0 + elasticity_lift * weekend_boost * exposure)
             )
 
         # Reconstruct organic post-sale gameplay tail (players installing and playing newly purchased copies)
         tail_mask = is_interp & (with_promo["is_steam_sale"] == 0) & (with_promo["days_since_last_sale"].between(1, 7))
         if tail_mask.any():
             typical_elasticity = 0.50
-            tail_decay = 0.65 * np.exp(-with_promo.loc[tail_mask, "days_since_last_sale"] / 3.5)
-            weekend_tail = 1.0 + 0.15 * with_promo.loc[tail_mask, "is_weekend"]
+            tail_decay = TAIL_INITIAL_FACTOR * np.exp(-with_promo.loc[tail_mask, "days_since_last_sale"] / TAIL_DECAY_RATE)
+            weekend_tail = 1.0 + WEEKEND_BOOST * with_promo.loc[tail_mask, "is_weekend"]
             with_promo.loc[tail_mask, "demand"] = (
                 with_promo.loc[tail_mask, "demand"]
                 * (1.0 + typical_elasticity * tail_decay * weekend_tail)
             )
+
+        # Flag synthetic rows for downweighting / analysis
+        with_promo["is_synthetic_promo"] = np.where(promo_mask | tail_mask, 1, 0)
 
         # Smooth non-promotional viral anomalies on interpolated series (e.g. Silksong release spike)
         # Prevents a single monthly snapshot peak from stretching into a multi-month 95k plateau

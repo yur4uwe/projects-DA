@@ -7,6 +7,11 @@ import numpy as np
 import pandas as pd
 
 from src.features.calendar import create_calendar_features
+from src.features.constants import (
+    SALE_RAMP,
+    TAIL_DECAY_RATE,
+    TAIL_INITIAL_FACTOR,
+)
 from src.features.promotions import create_promotional_features
 from src.ingestion.sales_calendar import SteamSalesCalendar
 
@@ -65,9 +70,52 @@ def simulate_promotional_campaign(
     org_buffer = hist.copy()
     peak_promotional_lift = 0.0
 
+    # Precompute Prophet macro organic baseline across all future dates in a single batch call (~0.05s)
+    has_hybrid = hasattr(model, "prophet_model") and (
+        hasattr(model, "lgb_residual_model")
+        or hasattr(model, "lgb_organic_model")
+        or hasattr(model, "uplift_model")
+    )
+    if has_hybrid:
+        batch_pdf = pd.DataFrame()
+        batch_pdf["ds"] = [pd.to_datetime(d).tz_localize(None) for d in future_dates]
+        batch_pdf["promotion"] = 0.0
+        batch_pdf["holiday"] = 0.0
+        batch_prophet = model.prophet_model.predict(batch_pdf)
+        norm_bases = np.clip(np.exp(batch_prophet["yhat"].values), 0.0, None)
+        precomputed_p_bases = norm_bases * base_rolling_30
+        precomputed_p_lowers = (
+            np.clip(np.exp(batch_prophet["yhat_lower"].values), 0.0, None) * base_rolling_30
+        )
+        precomputed_p_uppers = (
+            np.clip(np.exp(batch_prophet["yhat_upper"].values), 0.0, None) * base_rolling_30
+        )
+
+        # Compute initial boundary residual at simulation cutoff (last historical day)
+        last_demand = float(hist["demand"].iloc[-1])
+        last_pdf = pd.DataFrame(
+            {"ds": [pd.to_datetime(last_date).tz_localize(None)], "promotion": 0.0, "holiday": 0.0}
+        )
+        last_prophet = model.prophet_model.predict(last_pdf)
+        last_p_base = float(
+            np.clip(np.exp(last_prophet["yhat"].iloc[0]), 0.0, None) * base_rolling_30
+        )
+        boundary_log_res = float(
+            np.clip(np.log(max(last_demand, 1.0) / max(last_p_base, 1.0)), -0.5, 0.5)
+        )
+        boundary_add_res = float(
+            np.clip(last_demand - last_p_base, -last_p_base * 0.5, last_p_base * 0.5)
+        )
+    else:
+        precomputed_p_bases = None
+        precomputed_p_lowers = None
+        precomputed_p_uppers = None
+        boundary_log_res = 0.0
+        boundary_add_res = 0.0
+
     for idx, f_date in enumerate(future_dates):
         # Is the promo active on this day?
-        in_promo_window = promo_start <= f_date <= promo_end
+        in_promo_window = (promo_start <= f_date <= promo_end) and (discount_depth > 0.001)
         days_from_start = (f_date - promo_start).days
 
         # Base calendar features
@@ -110,6 +158,8 @@ def simulate_promotional_campaign(
             org_demands[-30] if len(org_demands) >= 30 else org_demands[-1]
         )
 
+        day_org["sales_rolling_3"] = float(np.mean(org_demands[-3:]))
+        day_org["sales_rolling_std_3"] = float(np.std(org_demands[-3:]))
         day_org["sales_rolling_7"] = float(np.mean(org_demands[-7:]))
         day_org["sales_rolling_std_7"] = float(np.std(org_demands[-7:]))
         day_org["sales_rolling_14"] = float(np.mean(org_demands[-14:]))
@@ -117,6 +167,21 @@ def simulate_promotional_campaign(
         day_org["sales_momentum_7_30"] = float(
             day_org["sales_rolling_7"].iloc[0] / max(base_rolling_30, 1.0)
         )
+        day_org["sales_momentum_3_7"] = float(
+            np.clip(
+                day_org["sales_rolling_3"].iloc[0] / max(day_org["sales_rolling_7"].iloc[0], 1.0),
+                0.5,
+                2.0,
+            )
+        )
+        prev_3d = org_demands[-4] if len(org_demands) >= 4 else org_demands[0]
+        denom_trend = max(3.0 * day_org["sales_rolling_7"].iloc[0], 1.0)
+        day_org["sales_trend_3d"] = float(
+            np.clip((org_demands[-1] - prev_3d) / denom_trend, -1.0, 1.0)
+        )
+        day_org["sale_progress"] = 0.0
+        day_org["days_until_sale_end"] = -1
+        day_org["storefront_exposure"] = 0.0
 
         for static_col in [
             "appid",
@@ -129,12 +194,25 @@ def simulate_promotional_campaign(
             if static_col in hist.columns:
                 day_org[static_col] = hist[static_col].iloc[-1]
 
-        # Predict organic counterfactual baseline with horizon-damped short-term residual
-        if hasattr(model, "predict_components"):
+        # Predict organic counterfactual baseline with asymptotic boundary residual decay
+        # Transient shocks at the historical cutoff decay smoothly with half-life tau = 3.5 days,
+        # preventing recursive autoregressive positive feedback loops from inflating early days.
+        if hasattr(model, "uplift_model") or hasattr(model, "lgb_organic_model"):
+            p_base = float(precomputed_p_bases[idx])
+            damped_r = boundary_log_res * np.exp(-idx / 3.5)
+            org_val = max(0.0, p_base * np.exp(damped_r))
+            org_lower = max(0.0, float(precomputed_p_lowers[idx]) * np.exp(damped_r)) if precomputed_p_lowers is not None else org_val * 0.85
+            org_upper = max(0.0, float(precomputed_p_uppers[idx]) * np.exp(damped_r)) if precomputed_p_uppers is not None else org_val * 1.15
+        elif has_hybrid:
+            p_base = float(precomputed_p_bases[idx])
+            damped_res = boundary_add_res * np.exp(-idx / 3.5)
+            org_val = max(0.0, p_base + damped_res)
+            org_lower = max(0.0, float(precomputed_p_lowers[idx]) + damped_res * 0.8)
+            org_upper = max(0.0, float(precomputed_p_uppers[idx]) + damped_res * 1.2)
+        elif hasattr(model, "predict_components"):
             org_comps = model.predict_components(day_org)
             p_base = float(org_comps["prophet_base"][0])
-            lgb_res = float(org_comps["lgbm_residual"][0])
-            damped_res = lgb_res * np.exp(-idx / 7.0)
+            damped_res = boundary_add_res * np.exp(-idx / 3.5)
             org_val = max(0.0, p_base + damped_res)
             org_lower = float(org_comps["yhat_lower"][0])
             org_upper = float(org_comps["yhat_upper"][0])
@@ -152,69 +230,71 @@ def simulate_promotional_campaign(
         # ---------------------------------------------------------------------
         # 2. Promotional Uplift or Post-Sale Decay Evaluation
         # ---------------------------------------------------------------------
-        if in_promo_window:
-            # Intra-sale storefront rollout curve:
-            # Day 0: 0.65x (ramp-up, mail queue rollout across 24 hours)
-            # Day 1: 1.15x (front-page carousel peak)
-            # Day 2: 1.25x (weekend / full exposure peak)
-            # Mid-sale: 1.05x down to 0.85x (storefront fatigue)
-            # Final Day: 1.10x (last-chance urgency bump)
-            if sale_duration_days <= 2:
-                profile_factor = 0.85 if days_from_start == 0 else 1.15
-            elif days_from_start == 0:
-                profile_factor = 0.65
-            elif days_from_start == 1:
-                profile_factor = 1.15
-            elif days_from_start == 2:
-                profile_factor = 1.25
-            elif days_from_start == sale_duration_days - 1:
-                profile_factor = 1.10
-            else:
-                profile_factor = max(0.85, 1.05 - 0.04 * days_from_start)
+        is_discounted = discount_depth > 0.001
 
+        if in_promo_window and is_discounted:
             day_promo = day_org.copy()
-            active_discount = discount_depth * profile_factor
+            active_discount = discount_depth
             day_promo["is_steam_sale"] = 1
             day_promo["discount_depth"] = active_discount
             day_promo["effective_price"] = base_p * (1.0 - active_discount)
             day_promo["promo_x_discount"] = active_discount
             day_promo["promo_x_weekend"] = day_promo["is_weekend"]
             day_promo["sale_day_index"] = days_from_start
+            day_promo["sale_progress"] = float((days_from_start + 1) / max(sale_duration_days, 1))
+            day_promo["days_until_sale_end"] = max(sale_duration_days - 1 - days_from_start, 0)
+            day_promo["storefront_exposure"] = float(SALE_RAMP.get(days_from_start, 1.0))
             day_promo["days_since_last_sale"] = 0
             if is_custom_event:
                 day_promo["sale_name"] = custom_event_name
             else:
                 day_promo["is_major_seasonal_sale"] = 1
 
-            if hasattr(model, "predict_components"):
+            if hasattr(model, "uplift_model"):
+                X_up = model._prepare_uplift_features(day_promo)
+                rel_lift = max(0.0, float(model.uplift_model.predict(X_up)[0]))
+                pred_val = org_val * (1.0 + rel_lift)
+                peak_promotional_lift = max(peak_promotional_lift, rel_lift)
+                pred_lower = max(0.0, pred_val * 0.85)
+                pred_upper = pred_val * 1.15
+            elif has_hybrid:
+                p_base = float(precomputed_p_bases[idx])
+                raw_lgb_promo = float(model.lgb_residual_model.predict(day_promo)[0])
+                raw_promo_val = max(0.0, p_base + raw_lgb_promo)
+                lift = max(0.0, raw_promo_val - org_val)
+                peak_promotional_lift = max(peak_promotional_lift, lift)
+                pred_val = org_val + lift
+                pred_lower = org_lower + lift * 0.80
+                pred_upper = org_upper + lift * 1.20
+            elif hasattr(model, "predict_components"):
                 promo_comps = model.predict_components(day_promo)
                 raw_promo_val = float(promo_comps["combined"][0])
-                raw_lower = float(promo_comps["yhat_lower"][0])
-                raw_upper = float(promo_comps["yhat_upper"][0])
+                lift = max(0.0, raw_promo_val - org_val)
+                peak_promotional_lift = max(peak_promotional_lift, lift)
+                pred_val = org_val + lift
+                pred_lower = org_lower + lift * 0.80
+                pred_upper = org_upper + lift * 1.20
             else:
                 raw_promo_preds = model.predict(day_promo)
                 raw_promo_val = float(raw_promo_preds[0])
-                raw_lower = float(max(0.0, raw_promo_val * 0.85))
-                raw_upper = float(raw_promo_val * 1.15)
-
-            # Uplift above organic baseline
-            lift = max(0.0, raw_promo_val - org_val)
-            peak_promotional_lift = max(peak_promotional_lift, lift)
-
-            pred_val = org_val + lift
-            pred_lower = org_lower + lift * 0.80
-            pred_upper = org_upper + lift * 1.20
+                lift = max(0.0, raw_promo_val - org_val)
+                pred_val = org_val + lift
+                pred_lower = org_lower + lift * 0.80
+                pred_upper = org_upper + lift * 1.20
             sale_name_str = custom_event_name if is_custom_event else "Steam Seasonal Sale"
 
-        elif f_date > promo_end:
+        elif f_date > promo_end and is_discounted:
             days_since = (f_date - promo_end).days
             # Smooth post-sale gameplay tail: installations and playtime decay smoothly back to organic
-            tail_factor = 0.50 * np.exp(-days_since / 2.5)
-            tail_lift = peak_promotional_lift * tail_factor if tail_factor > 0.02 else 0.0
-
-            pred_val = org_val + tail_lift
-            pred_lower = org_lower + tail_lift * 0.80
-            pred_upper = org_upper + tail_lift * 1.20
+            tail_factor = TAIL_INITIAL_FACTOR * np.exp(-days_since / TAIL_DECAY_RATE)
+            if hasattr(model, "uplift_model"):
+                tail_lift = peak_promotional_lift * tail_factor if tail_factor > 0.02 else 0.0
+                pred_val = org_val * (1.0 + tail_lift)
+            else:
+                tail_lift = peak_promotional_lift * tail_factor if tail_factor > 0.02 else 0.0
+                pred_val = org_val + tail_lift
+            pred_lower = max(0.0, pred_val * 0.85)
+            pred_upper = pred_val * 1.15
             sale_name_str = "None"
         else:
             pred_val = org_val

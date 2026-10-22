@@ -233,9 +233,12 @@ with kpi_cols[1]:
     )
 
 with kpi_cols[2]:
+    total_base_vol = max(baseline_ccu * len(forecast_df), 1.0)
+    pct_lift = (incremental_player_days / total_base_vol) * 100
     st.metric(
         label="Incremental Demand Lift",
         value=f"{incremental_player_days:,.0f}",
+        delta=f"+{pct_lift:.1f}% Total Lift",
         help="Estimated total incremental player-days above baseline throughout the forecast horizon.",
     )
 
@@ -264,6 +267,16 @@ tab_forecast, tab_elasticity, tab_diagnostics = st.tabs(
 with tab_forecast:
     st.subheader(f"Demand Trajectory & Promotional Window for {selected_game_name}")
 
+    chart_mode = st.radio(
+        "Trajectory Display Scale",
+        ["Native CCU Scale", "Indexed to Baseline (% of Organic Baseline)"],
+        horizontal=True,
+        help="Use Indexed view to compare promotional lift across games of different player-base sizes on a unified scale.",
+    )
+    is_indexed = "Indexed" in chart_mode
+    y_norm = (baseline_ccu / 100.0) if (is_indexed and baseline_ccu > 0) else 1.0
+    y_label = "Demand (% of Baseline)" if is_indexed else "Concurrent Players (CCU)"
+
     fig = go.Figure()
 
     # Historical actual curve from API
@@ -271,8 +284,8 @@ with tab_forecast:
         fig.add_trace(
             go.Scatter(
                 x=history_df["date"],
-                y=history_df["demand"],
-                name="Historical Actual CCU",
+                y=history_df["demand"] / y_norm,
+                name="Historical Actual",
                 line=dict(color="#2962FF", width=2),
                 mode="lines",
             )
@@ -280,7 +293,7 @@ with tab_forecast:
         fig.add_trace(
             go.Scatter(
                 x=history_df["date"],
-                y=history_df["sales_rolling_7"],
+                y=history_df["sales_rolling_7"] / y_norm,
                 name="Historical 7d Baseline",
                 line=dict(color="#90CAF9", width=1.5, dash="dot"),
                 mode="lines",
@@ -291,7 +304,7 @@ with tab_forecast:
     fig.add_trace(
         go.Scatter(
             x=forecast_df["date"],
-            y=forecast_df["upper_bound"],
+            y=forecast_df["upper_bound"] / y_norm,
             line=dict(color="rgba(0,0,0,0)"),
             showlegend=False,
             hoverinfo="skip",
@@ -300,7 +313,7 @@ with tab_forecast:
     fig.add_trace(
         go.Scatter(
             x=forecast_df["date"],
-            y=forecast_df["lower_bound"],
+            y=forecast_df["lower_bound"] / y_norm,
             fill="tonexty",
             fillcolor="rgba(255, 152, 0, 0.15)",
             line=dict(color="rgba(0,0,0,0)"),
@@ -312,8 +325,8 @@ with tab_forecast:
     fig.add_trace(
         go.Scatter(
             x=forecast_df["date"],
-            y=forecast_df["predicted_ccu"],
-            name="Forecasted CCU",
+            y=forecast_df["predicted_ccu"] / y_norm,
+            name="Forecasted Demand",
             line=dict(color="#FF6D00", width=3),
             mode="lines+markers",
         )
@@ -339,7 +352,7 @@ with tab_forecast:
     fig.update_layout(
         template="plotly_white",
         xaxis_title="Date",
-        yaxis_title="Concurrent Players (CCU)",
+        yaxis_title=y_label,
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=20, r=20, t=30, b=20),

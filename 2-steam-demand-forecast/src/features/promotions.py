@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 
+from src.features.constants import SALE_RAMP
 from src.ingestion.sales_calendar import SteamSalesCalendar
 
 
@@ -24,6 +25,10 @@ def create_promotional_features(
 
     for col in eval_df.columns:
         out[col] = eval_df[col].values
+
+    # Storefront exposure ramp: Day 0 (35% due to 19:00 UTC start + download queue), Day 1 (85%), Day 2+ (100%)
+    exp_series = out["sale_day_index"].map(SALE_RAMP).fillna(1.0)
+    out["storefront_exposure"] = np.where(out["is_steam_sale"] == 1, exp_series, 0.0)
 
     # Discount depth: if an active Steam sale is happening and no explicit discount column is given,
     # assume typical indie discount depth (e.g. 20-50%), otherwise default_discount_depth

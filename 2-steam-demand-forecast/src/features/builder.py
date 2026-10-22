@@ -89,6 +89,16 @@ class FeaturePipeline:
                 * (1.0 + typical_elasticity * tail_decay * weekend_tail)
             )
 
+        # Smooth non-promotional viral anomalies on interpolated series (e.g. Silksong release spike)
+        # Prevents a single monthly snapshot peak from stretching into a multi-month 95k plateau
+        if is_interp.any():
+            non_promo_interp = is_interp & (with_promo["is_steam_sale"] == 0)
+            robust_median = float(with_promo["demand"].median())
+            viral_ceiling = max(robust_median * 3.0, 25000.0)
+            excess_mask = non_promo_interp & (with_promo["demand"] > viral_ceiling)
+            if excess_mask.any():
+                with_promo.loc[excess_mask, "demand"] = viral_ceiling
+
         # 4. Autoregressive lags (Listing 5 in syllabus)
         with_lags = create_lag_features(with_promo, target_col="demand", prefix="sales")
 

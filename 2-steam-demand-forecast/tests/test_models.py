@@ -46,3 +46,37 @@ def test_model_registry_crud(tmp_path) -> None:
     df = reg.list_experiments()
     assert len(df) == 1
     assert df["milestone"].iloc[0] == "M_TEST"
+
+
+def test_simulate_promotional_campaign_continuity() -> None:
+    import joblib
+    from pathlib import Path
+    from src.model.predict import simulate_promotional_campaign
+
+    model_path = Path("models/indie_demand_model.joblib")
+    data_path = Path("data/processed/367520_features.parquet")
+    if not model_path.exists() or not data_path.exists():
+        return
+
+    model = joblib.load(model_path)
+    df = pd.read_parquet(data_path)
+
+    res = simulate_promotional_campaign(
+        history_df=df,
+        model=model,
+        horizon_days=21,
+        start_date="2026-10-25",
+        discount_depth=0.50,
+        sale_duration_days=7,
+    )
+
+    fdf = res["forecast_df"]
+    # Peak CCU for Hollow Knight must remain bounded and not explode past 20k
+    assert res["peak_promo_ccu"] < 18000.0
+    assert res["peak_promo_ccu"] > res["recent_baseline_ccu"]
+
+    # Post-sale tail must decay back to organic baseline
+    post_sale_days = fdf[fdf["date"] > pd.to_datetime("2026-10-31").date()]
+    assert not post_sale_days.empty
+    # The last simulated day should be close to organic baseline (< 1.25x recent_baseline)
+    assert post_sale_days["predicted_ccu"].iloc[-1] < res["recent_baseline_ccu"] * 1.25

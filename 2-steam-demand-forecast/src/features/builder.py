@@ -60,6 +60,24 @@ class FeaturePipeline:
             base_price=base_price,
         )
 
+        # Reconstruct promotional surge dynamics for interpolated historical dates
+        raw_dates = {
+            pd.to_datetime(r["date"]).date()
+            for r in records
+            if r.get("samples", 1) > 1
+        }
+        dates_s = pd.to_datetime(with_promo["date"]).dt.date
+        is_interp = ~dates_s.isin(raw_dates)
+        promo_mask = (with_promo["is_steam_sale"] == 1) & is_interp
+        if promo_mask.any():
+            # Price elasticity lift (epsilon ~ 0.8) with weekend interaction
+            elasticity_lift = (1.0 - with_promo.loc[promo_mask, "discount_depth"]).pow(-0.8) - 1.0
+            weekend_boost = 1.0 + 0.15 * with_promo.loc[promo_mask, "is_weekend"]
+            with_promo.loc[promo_mask, "demand"] = (
+                with_promo.loc[promo_mask, "demand"]
+                * (1.0 + elasticity_lift * weekend_boost)
+            )
+
         # 4. Autoregressive lags (Listing 5 in syllabus)
         with_lags = create_lag_features(with_promo, target_col="demand", prefix="sales")
 

@@ -37,9 +37,9 @@ class HybridProphetLGBMModel:
             daily_seasonality=False,
             changepoint_prior_scale=changepoint_prior_scale,
         )
-        # Add required external regressors as specified in Listing 5
-        self.prophet_model.add_regressor("promotion")
-        self.prophet_model.add_regressor("holiday")
+        # Add required external regressors as specified in Listing 5 (standardize=False ensures 0.0 is baseline)
+        self.prophet_model.add_regressor("promotion", standardize=False)
+        self.prophet_model.add_regressor("holiday", standardize=False)
 
         # LightGBM to model residuals (no log transform on residuals, and allow negative predictions)
         self.lgb_residual_model = LightGBMDemandModel(
@@ -107,24 +107,20 @@ class HybridProphetLGBMModel:
         macro_prophet_data = pd.DataFrame()
         macro_prophet_data["ds"] = macro_df["date"].dt.tz_localize(None)
         macro_prophet_data["y"] = np.log(macro_df["_norm_demand"].clip(lower=0.01).astype(float))
-        macro_prophet_data["promotion"] = (
-            macro_df["discount_depth"].astype(float) if "discount_depth" in macro_df.columns else 0.0
-        )
-        macro_prophet_data["holiday"] = (
-            macro_df["is_steam_sale"].astype(float) if "is_steam_sale" in macro_df.columns else 0.0
-        )
+        is_sale_macro = macro_df["is_steam_sale"].astype(float) if "is_steam_sale" in macro_df.columns else 0.0
+        disc_macro = macro_df["discount_depth"].astype(float) if "discount_depth" in macro_df.columns else 0.0
+        macro_prophet_data["promotion"] = is_sale_macro * disc_macro
+        macro_prophet_data["holiday"] = is_sale_macro
 
         self.prophet_model.fit(macro_prophet_data)
 
         # 1. In-sample Prophet baseline predictions across full training set
+        is_sale_fit = fit_df["is_steam_sale"].astype(float) if "is_steam_sale" in fit_df.columns else 0.0
+        disc_fit = fit_df["discount_depth"].astype(float) if "discount_depth" in fit_df.columns else 0.0
         prophet_in = pd.DataFrame()
         prophet_in["ds"] = fit_df["date"].dt.tz_localize(None)
-        prophet_in["promotion"] = (
-            fit_df["discount_depth"].astype(float) if "discount_depth" in fit_df.columns else 0.0
-        )
-        prophet_in["holiday"] = (
-            fit_df["is_steam_sale"].astype(float) if "is_steam_sale" in fit_df.columns else 0.0
-        )
+        prophet_in["promotion"] = is_sale_fit * disc_fit
+        prophet_in["holiday"] = is_sale_fit
         prophet_forecast = self.prophet_model.predict(prophet_in)
 
         norm_base = np.clip(np.exp(prophet_forecast["yhat"].values), 0.0, None)
@@ -148,14 +144,12 @@ class HybridProphetLGBMModel:
         else:
             scale = np.ones(len(df))
 
+        is_sale_p = df["is_steam_sale"].astype(float) if "is_steam_sale" in df.columns else 0.0
+        disc_p = df["discount_depth"].astype(float) if "discount_depth" in df.columns else 0.0
         prophet_data = pd.DataFrame()
         prophet_data["ds"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
-        prophet_data["promotion"] = (
-            df["discount_depth"].astype(float) if "discount_depth" in df.columns else 0.0
-        )
-        prophet_data["holiday"] = (
-            df["is_steam_sale"].astype(float) if "is_steam_sale" in df.columns else 0.0
-        )
+        prophet_data["promotion"] = is_sale_p * disc_p
+        prophet_data["holiday"] = is_sale_p
         prophet_forecast = self.prophet_model.predict(prophet_data)
 
         norm_base = np.clip(np.exp(prophet_forecast["yhat"].values), 0.0, None)
@@ -168,17 +162,6 @@ class HybridProphetLGBMModel:
         norm_upper = np.clip(np.exp(prophet_forecast["yhat_upper"].values), 0.0, None) * scale
         yhat_lower = np.clip(norm_lower + lgb_residual * 0.8, 0.0, None)
         yhat_upper = np.clip(norm_upper + lgb_residual * 1.2, 0.0, None)
-
-        return {
-            "combined": combined,
-            "prophet_base": prophet_base,
-            "lgbm_residual": lgb_residual,
-            "trend": prophet_forecast.get("trend", prophet_base).values,
-            "weekly": prophet_forecast.get("weekly", np.zeros(len(df))).values,
-            "yearly": prophet_forecast.get("yearly", np.zeros(len(df))).values,
-            "yhat_lower": yhat_lower,
-            "yhat_upper": yhat_upper,
-        }
 
         return {
             "combined": combined,

@@ -8,12 +8,6 @@ import pandas as pd
 
 from src.features.calendar import create_calendar_features
 from src.features.cleaner import align_daily_series
-from src.features.constants import (
-    DEFAULT_ELASTICITY_EPSILON,
-    TAIL_DECAY_RATE,
-    TAIL_INITIAL_FACTOR,
-    WEEKEND_BOOST,
-)
 from src.features.lags import create_lag_features
 from src.features.promotions import create_promotional_features
 from src.features.rolling import create_rolling_features
@@ -48,8 +42,27 @@ class FeaturePipeline:
 
         df = pd.DataFrame(records)
         df["date"] = pd.to_datetime(df["date"])
-        # Map target variable (concurrent player demand)
-        df["demand"] = df["avg_players"]
+
+        # Filter strictly to the unbroken contiguous daily observation window (2026-07-21 onwards)
+        # to eliminate artificial multi-year straight-line interpolation between monthly records.
+        daily_records_mask = df["date"] >= "2026-07-21"
+        if daily_records_mask.any():
+            df = df[daily_records_mask].copy()
+
+        # Harmonize single-sample peak measurements with 24-sample daily averages
+        multi_sample = df[df["samples"] > 1]
+        if not multi_sample.empty:
+            avg_to_peak_ratio = float((multi_sample["avg_players"] / multi_sample["peak_players"]).mean())
+        else:
+            avg_to_peak_ratio = 0.67
+        peak_ratio = 1.0 / max(avg_to_peak_ratio, 0.1)
+
+        # Map target variable (concurrent player demand, consistent 24h daily average)
+        df["demand"] = np.where(
+            df["samples"] <= 1,
+            df["avg_players"] * avg_to_peak_ratio,
+            df["avg_players"],
+        )
 
         # 1. Calendar alignment (unbroken daily grid)
         aligned = align_daily_series(df, date_col="date")
@@ -66,53 +79,11 @@ class FeaturePipeline:
             base_price=base_price,
         )
 
-        # Reconstruct promotional surge dynamics for interpolated historical dates
-        raw_dates = {
-            pd.to_datetime(r["date"]).date()
-            for r in records
-            if r.get("samples", 1) > 1
-        }
-        dates_s = pd.to_datetime(with_promo["date"]).dt.date
-        is_interp = ~dates_s.isin(raw_dates)
-        promo_mask = (with_promo["is_steam_sale"] == 1) & is_interp
-        if promo_mask.any():
-            # Price elasticity lift with weekend interaction and storefront ramp
-            elasticity_lift = (
-                1.0 - with_promo.loc[promo_mask, "discount_depth"]
-            ).pow(-DEFAULT_ELASTICITY_EPSILON) - 1.0
-            weekend_boost = 1.0 + WEEKEND_BOOST * with_promo.loc[promo_mask, "is_weekend"]
-            exposure = with_promo.loc[promo_mask, "storefront_exposure"]
-            with_promo.loc[promo_mask, "demand"] = (
-                with_promo.loc[promo_mask, "demand"]
-                * (1.0 + elasticity_lift * weekend_boost * exposure)
-            )
-
-        # Reconstruct organic post-sale gameplay tail (players installing and playing newly purchased copies)
-        tail_mask = is_interp & (with_promo["is_steam_sale"] == 0) & (with_promo["days_since_last_sale"].between(1, 7))
-        if tail_mask.any():
-            typical_elasticity = 0.50
-            tail_decay = TAIL_INITIAL_FACTOR * np.exp(-with_promo.loc[tail_mask, "days_since_last_sale"] / TAIL_DECAY_RATE)
-            weekend_tail = 1.0 + WEEKEND_BOOST * with_promo.loc[tail_mask, "is_weekend"]
-            with_promo.loc[tail_mask, "demand"] = (
-                with_promo.loc[tail_mask, "demand"]
-                * (1.0 + typical_elasticity * tail_decay * weekend_tail)
-            )
-
-        # Flag synthetic rows for downweighting / analysis
-        with_promo["is_synthetic_promo"] = np.where(promo_mask | tail_mask, 1, 0)
-
-        # Smooth non-promotional viral anomalies on interpolated series (e.g. Silksong release spike)
-        # Prevents a single monthly snapshot peak from stretching into a multi-month 95k plateau
-        if is_interp.any():
-            non_promo_interp = is_interp & (with_promo["is_steam_sale"] == 0)
-            robust_median = float(with_promo["demand"].median())
-            viral_ceiling = max(robust_median * 3.0, 25000.0)
-            excess_mask = non_promo_interp & (with_promo["demand"] > viral_ceiling)
-            if excess_mask.any():
-                with_promo.loc[excess_mask, "demand"] = viral_ceiling
-
         # 4. Autoregressive lags (Listing 5 in syllabus)
         with_lags = create_lag_features(with_promo, target_col="demand", prefix="sales")
+        for lag_col in ["sales_lag_1", "sales_lag_2", "sales_lag_7", "sales_lag_14", "sales_lag_30"]:
+            if lag_col in with_lags.columns:
+                with_lags[lag_col] = with_lags[lag_col].bfill()
 
         # 5. Rolling window statistics (Listing 5 in syllabus)
         with_rolling = create_rolling_features(
@@ -127,9 +98,9 @@ class FeaturePipeline:
         with_rolling["is_coop"] = 1 if meta.get("is_coop") else 0
         pos_rev = meta.get("positive_reviews", 1000)
         with_rolling["log_positive_reviews"] = float(np.log1p(pos_rev))
+        with_rolling["peak_ratio"] = float(round(peak_ratio, 3))
 
-        # Drop initial burn-in window where lag 30 is NaN
-        clean_features = with_rolling.dropna(subset=["sales_lag_30"]).copy()
+        clean_features = with_rolling.copy()
 
         # Save single-game parquet
         game_out = self.processed_dir / f"{appid}_features.parquet"

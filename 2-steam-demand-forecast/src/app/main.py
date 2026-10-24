@@ -203,7 +203,8 @@ with st.spinner(f"Querying server for {horizon_days}-day multi-step simulation..
 forecast_df = pd.DataFrame(sim_data["forecast_series"])
 forecast_df["date"] = pd.to_datetime(forecast_df["date"])
 baseline_ccu = sim_data["recent_baseline_ccu"]
-peak_promo_ccu = sim_data["peak_promo_ccu"]
+peak_promo_peak_ccu = sim_data.get("peak_promo_peak_ccu", peak_promo_ccu * 1.45)
+game_peak_ratio = sim_data.get("peak_ratio", 1.45)
 surge_multiplier = sim_data["peak_surge_multiplier"]
 incremental_player_days = sim_data["total_incremental_player_days"]
 cooldown_compliant = sim_data["cooldown_compliant"]
@@ -221,15 +222,15 @@ with kpi_cols[0]:
     st.metric(
         label="Recent Baseline CCU",
         value=f"{baseline_ccu:,.0f}",
-        help="Average daily concurrent players over the last 14 days.",
+        help=f"Average daily concurrent players over the last 14 days (Peak equivalent: ~{baseline_ccu * game_peak_ratio:,.0f}).",
     )
 
 with kpi_cols[1]:
     st.metric(
         label="Forecasted Peak CCU",
         value=f"{peak_promo_ccu:,.0f}",
-        delta=f"+{(surge_multiplier - 1.0) * 100:.1f}% Surge",
-        help="Estimated peak concurrent player spike during the promotional event.",
+        delta=f"+{(surge_multiplier - 1.0) * 100:.1f}% Surge (~{peak_promo_peak_ccu:,.0f} Peak)",
+        help=f"Average daily CCU during promo peak. Estimated 24h Peak CCU on SteamDB scale is ~{peak_promo_peak_ccu:,.0f} (peak/avg ratio: {game_peak_ratio:.2f}x).",
     )
 
 with kpi_cols[2]:
@@ -269,13 +270,29 @@ with tab_forecast:
 
     chart_mode = st.radio(
         "Trajectory Display Scale",
-        ["Native CCU Scale", "Indexed to Baseline (% of Organic Baseline)"],
+        [
+            "Average Daily CCU (Model Baseline)",
+            "Estimated Peak CCU (SteamDB 24h Peak)",
+            "Indexed to Baseline (% of Organic Baseline)",
+        ],
         horizontal=True,
-        help="Use Indexed view to compare promotional lift across games of different player-base sizes on a unified scale.",
+        help="SteamDB charts report daily peak CCU, while demand modeling operates on 24-hour average CCU. Select 'Estimated Peak CCU' to compare directly with SteamDB peaks.",
     )
     is_indexed = "Indexed" in chart_mode
-    y_norm = (baseline_ccu / 100.0) if (is_indexed and baseline_ccu > 0) else 1.0
-    y_label = "Demand (% of Baseline)" if is_indexed else "Concurrent Players (CCU)"
+    is_peak_mode = "Peak CCU" in chart_mode
+
+    if is_indexed:
+        y_norm = (baseline_ccu / 100.0) if (baseline_ccu > 0) else 1.0
+        y_label = "Demand (% of Baseline)"
+        scale_mult = 1.0
+    elif is_peak_mode:
+        y_norm = 1.0
+        y_label = "Peak Concurrent Players (SteamDB Scale)"
+        scale_mult = game_peak_ratio
+    else:
+        y_norm = 1.0
+        y_label = "Average Daily Concurrent Players (CCU)"
+        scale_mult = 1.0
 
     fig = go.Figure()
 
@@ -284,7 +301,7 @@ with tab_forecast:
         fig.add_trace(
             go.Scatter(
                 x=history_df["date"],
-                y=history_df["demand"] / y_norm,
+                y=(history_df["demand"] * scale_mult) / y_norm,
                 name="Historical Actual",
                 line=dict(color="#2962FF", width=2),
                 mode="lines",
@@ -293,7 +310,7 @@ with tab_forecast:
         fig.add_trace(
             go.Scatter(
                 x=history_df["date"],
-                y=history_df["sales_rolling_7"] / y_norm,
+                y=(history_df["sales_rolling_7"] * scale_mult) / y_norm,
                 name="Historical 7d Baseline",
                 line=dict(color="#90CAF9", width=1.5, dash="dot"),
                 mode="lines",
@@ -301,10 +318,11 @@ with tab_forecast:
         )
 
     # Shaded confidence band
+    target_pred_col = "predicted_peak_ccu" if is_peak_mode else "predicted_ccu"
     fig.add_trace(
         go.Scatter(
             x=forecast_df["date"],
-            y=forecast_df["upper_bound"] / y_norm,
+            y=(forecast_df["upper_bound"] * scale_mult) / y_norm,
             line=dict(color="rgba(0,0,0,0)"),
             showlegend=False,
             hoverinfo="skip",
@@ -313,7 +331,7 @@ with tab_forecast:
     fig.add_trace(
         go.Scatter(
             x=forecast_df["date"],
-            y=forecast_df["lower_bound"] / y_norm,
+            y=(forecast_df["lower_bound"] * scale_mult) / y_norm,
             fill="tonexty",
             fillcolor="rgba(255, 152, 0, 0.15)",
             line=dict(color="rgba(0,0,0,0)"),
@@ -325,7 +343,7 @@ with tab_forecast:
     fig.add_trace(
         go.Scatter(
             x=forecast_df["date"],
-            y=forecast_df["predicted_ccu"] / y_norm,
+            y=forecast_df[target_pred_col] / y_norm if not is_indexed else (forecast_df["predicted_ccu"] / y_norm),
             name="Forecasted Demand",
             line=dict(color="#FF6D00", width=3),
             mode="lines+markers",

@@ -113,6 +113,8 @@ def predict_forecast(req: ForecastRequest) -> dict[str, Any]:
         "horizon_days": sim_res["horizon_days"],
         "recent_baseline_ccu": sim_res["recent_baseline_ccu"],
         "peak_promo_ccu": sim_res["peak_promo_ccu"],
+        "peak_promo_peak_ccu": sim_res.get("peak_promo_peak_ccu", sim_res["peak_promo_ccu"]),
+        "peak_ratio": sim_res.get("peak_ratio", 1.45),
         "peak_surge_multiplier": sim_res["peak_surge_multiplier"],
         "total_incremental_player_days": sim_res["total_incremental_player_days"],
         "cooldown_compliant": sim_res["cooldown_compliant"],

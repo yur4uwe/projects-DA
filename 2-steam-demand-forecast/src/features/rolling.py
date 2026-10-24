@@ -22,7 +22,7 @@ def create_rolling_features(
 
     for w in window_sizes:
         col_mean = f"{prefix}_rolling_{w}"
-        out[col_mean] = shifted_target.rolling(window=w, min_periods=1).mean()
+        out[col_mean] = shifted_target.rolling(window=w, min_periods=1).mean().bfill()
 
         col_std = f"{prefix}_rolling_std_{w}"
         out[col_std] = shifted_target.rolling(window=w, min_periods=2).std().fillna(0.0)

@@ -116,9 +116,9 @@ def train_eval_pipeline(
     # -------------------------------------------------------------------------
     logger.info("Training M4: Hybrid Prophet + LightGBM Ensemble...")
     m4 = HybridProphetLGBMModel(
-        yearly_seasonality=True,
+        yearly_seasonality=False,
         weekly_seasonality=True,
-        lgb_n_estimators=400,
+        lgb_n_estimators=200,
         lgb_learning_rate=0.03,
     )
     m4.fit(train_df, target_col="demand")

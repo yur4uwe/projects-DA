@@ -1,4 +1,4 @@
-"""Decoupled Two-Stage Hybrid Demand & Promotional Uplift Model conforming to Listing 5."""
+"""Decoupled Two-Stage Hybrid Demand & Promotional Uplift Model with Game-Specific Calibration."""
 
 import logging
 from typing import Any
@@ -19,19 +19,130 @@ logger = logging.getLogger(__name__)
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
 
 
+class SingleGameHybridModel:
+    """Game-specific hybrid demand model fitting Prophet weekly cycles and LightGBM micro-corrections."""
+
+    def __init__(
+        self,
+        appid: int = 0,
+        game_name: str = "",
+        changepoint_prior_scale: float = 0.01,
+        weekly_seasonality: bool = True,
+        lgb_n_estimators: int = 150,
+        lgb_learning_rate: float = 0.03,
+        random_state: int = 42,
+    ) -> None:
+        self.appid = appid
+        self.game_name = game_name
+        self.weekly_seasonality = weekly_seasonality
+        self.changepoint_prior_scale = changepoint_prior_scale
+        self.lgb_n_estimators = lgb_n_estimators
+        self.lgb_learning_rate = lgb_learning_rate
+        self.random_state = random_state
+        self.peak_ratio: float = 1.45
+        self.base_rolling_30: float = 5000.0
+
+        self.prophet_model = Prophet(
+            yearly_seasonality=False,
+            weekly_seasonality=weekly_seasonality,
+            daily_seasonality=False,
+            changepoint_prior_scale=changepoint_prior_scale,
+        )
+        self.lgb_organic_model = LightGBMDemandModel(
+            n_estimators=lgb_n_estimators,
+            learning_rate=lgb_learning_rate,
+            num_leaves=15,
+            log_transform=False,
+            clip_non_negative=False,
+            feature_cols=HybridProphetLGBMModel.ORGANIC_FEATURE_COLS,
+            random_state=random_state,
+        )
+
+    def fit(self, df: pd.DataFrame, target_col: str = "demand") -> "SingleGameHybridModel":
+        fit_df = df.copy()
+        fit_df["date"] = pd.to_datetime(fit_df["date"])
+
+        if "appid" in fit_df.columns:
+            self.appid = int(fit_df["appid"].iloc[-1])
+        if "game_name" in fit_df.columns:
+            self.game_name = str(fit_df["game_name"].iloc[-1])
+        if "peak_ratio" in fit_df.columns:
+            self.peak_ratio = float(fit_df["peak_ratio"].iloc[-1])
+
+        # Baseline scale (rolling 30d or recent baseline)
+        if "sales_rolling_30" in fit_df.columns and fit_df["sales_rolling_30"].notna().any():
+            scale = fit_df["sales_rolling_30"].clip(lower=10.0)
+        else:
+            scale = pd.Series(fit_df[target_col].median(), index=fit_df.index).clip(lower=10.0)
+
+        self.base_rolling_30 = float(scale.iloc[-1])
+        fit_df["_scale"] = scale
+        fit_df["_norm_demand"] = fit_df[target_col] / fit_df["_scale"]
+
+        # 1. Fit game-specific Prophet model on normalized series
+        p_df = pd.DataFrame(
+            {
+                "ds": fit_df["date"].dt.tz_localize(None),
+                "y": np.log(fit_df["_norm_demand"].clip(lower=0.01).astype(float)),
+            }
+        )
+        self.prophet_model.fit(p_df)
+
+        # In-sample predictions
+        p_in = pd.DataFrame({"ds": fit_df["date"].dt.tz_localize(None)})
+        p_forecast = self.prophet_model.predict(p_in)
+        norm_base = np.clip(np.exp(p_forecast["yhat"].values), 0.0, None)
+        prophet_base = norm_base * fit_df["_scale"].values
+
+        # 2. Fit game-specific LightGBM model on organic log residuals
+        X_org = HybridProphetLGBMModel._prepare_organic_features_df(fit_df, scale.values)
+        log_org_ratio = np.log(
+            np.clip(fit_df[target_col].values / np.maximum(prophet_base, 10.0), 0.05, 20.0)
+        )
+        self.lgb_organic_model.fit(X_org, log_org_ratio)
+
+        return self
+
+    def predict_components(self, df: pd.DataFrame) -> dict[str, np.ndarray]:
+        if "sales_rolling_30" in df.columns and df["sales_rolling_30"].notna().any():
+            scale = df["sales_rolling_30"].clip(lower=10.0).values
+        elif "sales_lag_1" in df.columns and df["sales_lag_1"].notna().any():
+            scale = df["sales_lag_1"].clip(lower=10.0).values
+        else:
+            scale = np.full(len(df), self.base_rolling_30)
+
+        prophet_data = pd.DataFrame({"ds": pd.to_datetime(df["date"]).dt.tz_localize(None)})
+        prophet_forecast = self.prophet_model.predict(prophet_data)
+        norm_base = np.clip(np.exp(prophet_forecast["yhat"].values), 0.0, None)
+        prophet_base = norm_base * scale
+
+        X_org = HybridProphetLGBMModel._prepare_organic_features_df(df, scale)
+        r_org = self.lgb_organic_model.predict(X_org)
+        organic_demand = np.clip(prophet_base * np.exp(r_org), 0.0, None)
+
+        yearly_comp = prophet_forecast["yearly"].values if "yearly" in prophet_forecast else np.zeros(len(df))
+        weekly_comp = prophet_forecast["weekly"].values if "weekly" in prophet_forecast else np.zeros(len(df))
+        trend_comp = prophet_forecast["trend"].values if "trend" in prophet_forecast else prophet_base
+
+        return {
+            "combined": organic_demand,
+            "prophet_base": prophet_base,
+            "organic_demand": organic_demand,
+            "uplift_factor": np.ones(len(df)),
+            "lgbm_residual": organic_demand - prophet_base,
+            "trend": trend_comp,
+            "weekly": weekly_comp,
+            "yearly": yearly_comp,
+            "yhat_lower": np.clip(organic_demand * 0.85, 0.0, None),
+            "yhat_upper": organic_demand * 1.15,
+        }
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        return self.predict_components(df)["combined"]
+
+
 class HybridProphetLGBMModel:
-    """M4 Hybrid Architecture with Decoupled Organic Baseline and Scale-Invariant Uplift.
-
-    Stage 1 (Organic):
-      Prophet macro baseline on normalized demand (rolling-30 scale) +
-      Scale-invariant LightGBM model on ratio-normalized lags and rolling statistics.
-      Target: log(y / prophet_base) on unpromoted observations.
-
-    Stage 2 (Uplift):
-      Uplift regressor on structural promotional features and theoretical price elasticity.
-      Target: (y / organic_demand) - 1.0 on promotional observations.
-      Guarantees scale-invariance and monotonic response across discount depth.
-    """
+    """Hybrid Architecture supporting Per-Game Dedicated Models with Global Fallback."""
 
     ORGANIC_FEATURE_COLS = [
         "norm_lag_1",
@@ -78,42 +189,44 @@ class HybridProphetLGBMModel:
 
     def __init__(
         self,
-        changepoint_prior_scale: float = 0.05,
-        yearly_seasonality: bool = True,
+        changepoint_prior_scale: float = 0.01,
+        yearly_seasonality: bool = False,
         weekly_seasonality: bool = True,
-        lgb_n_estimators: int = 400,
+        lgb_n_estimators: int = 150,
         lgb_learning_rate: float = 0.03,
         random_state: int = 42,
     ) -> None:
         self.changepoint_prior_scale = changepoint_prior_scale
         self.yearly_seasonality = yearly_seasonality
         self.weekly_seasonality = weekly_seasonality
+        self.lgb_n_estimators = lgb_n_estimators
+        self.lgb_learning_rate = lgb_learning_rate
         self.random_state = random_state
 
-        # Macro Prophet model (pure organic seasonality without promotional regressor pollution)
+        # Multi-game repository
+        self.game_models: dict[int, SingleGameHybridModel] = {}
+
+        # Global fallback Prophet & LightGBM
         self.prophet_model = Prophet(
             yearly_seasonality=yearly_seasonality,
             weekly_seasonality=weekly_seasonality,
             daily_seasonality=False,
             changepoint_prior_scale=changepoint_prior_scale,
         )
-
-        # Scale-invariant LightGBM for organic correction
         self.lgb_organic_model = LightGBMDemandModel(
             n_estimators=lgb_n_estimators,
             learning_rate=lgb_learning_rate,
-            num_leaves=31,
+            num_leaves=15,
             log_transform=False,
             clip_non_negative=False,
             feature_cols=self.ORGANIC_FEATURE_COLS,
             random_state=random_state,
         )
-
-        # Uplift model: structural price elasticity and promotional exposure with strict non-negative monotonicity
         self.uplift_model = Ridge(alpha=10.0, positive=True, random_state=random_state)
 
-    def _prepare_organic_features(
-        self, df: pd.DataFrame, scale: pd.Series | np.ndarray
+    @staticmethod
+    def _prepare_organic_features_df(
+        df: pd.DataFrame, scale: pd.Series | np.ndarray
     ) -> pd.DataFrame:
         """Create scale-invariant normalized lag and rolling features."""
         X = pd.DataFrame(index=df.index)
@@ -127,7 +240,9 @@ class HybridProphetLGBMModel:
             col = f"sales_rolling_{w}"
             X[f"norm_rolling_{w}"] = df[col].values / scale_safe if col in df.columns else 1.0
             col_std = f"sales_rolling_std_{w}"
-            X[f"norm_rolling_std_{w}"] = df[col_std].values / scale_safe if col_std in df.columns else 0.0
+            X[f"norm_rolling_std_{w}"] = (
+                df[col_std].values / scale_safe if col_std in df.columns else 0.0
+            )
 
         if "sales_rolling_std_30" in df.columns:
             X["norm_rolling_std_30"] = df["sales_rolling_std_30"].values / scale_safe
@@ -154,87 +269,158 @@ class HybridProphetLGBMModel:
 
         return X
 
+    def _prepare_organic_features(
+        self, df: pd.DataFrame, scale: pd.Series | np.ndarray
+    ) -> pd.DataFrame:
+        return self._prepare_organic_features_df(df, scale)
+
     def _prepare_uplift_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create promo-structural features with continuous economic elasticity."""
         X = pd.DataFrame(index=df.index)
-        disc = df["discount_depth"].clip(0.0, 0.95) if "discount_depth" in df.columns else pd.Series(0.0, index=df.index)
-        exposure = df["storefront_exposure"] if "storefront_exposure" in df.columns else pd.Series(1.0, index=df.index)
-        weekend = df["is_weekend"] if "is_weekend" in df.columns else pd.Series(0, index=df.index)
+        disc = (
+            df["discount_depth"].clip(0.0, 0.95)
+            if "discount_depth" in df.columns
+            else pd.Series(0.0, index=df.index)
+        )
+        exposure = (
+            df["storefront_exposure"]
+            if "storefront_exposure" in df.columns
+            else pd.Series(1.0, index=df.index)
+        )
+        weekend = (
+            df["is_weekend"] if "is_weekend" in df.columns else pd.Series(0, index=df.index)
+        )
 
-        # Theoretical economic price elasticity base: ((1 - d)^(-epsilon) - 1.0) * exposure * weekend_boost
         elast_lift = (1.0 - disc).pow(-DEFAULT_ELASTICITY_EPSILON) - 1.0
         weekend_factor = 1.0 + WEEKEND_BOOST * weekend
         X["base_elasticity"] = elast_lift * exposure * weekend_factor
         X["discount_depth"] = disc
         X["storefront_exposure"] = exposure
         X["is_weekend"] = weekend
-        X["is_major_seasonal_sale"] = df["is_major_seasonal_sale"].values if "is_major_seasonal_sale" in df.columns else 0
-        X["sale_progress"] = df["sale_progress"].values if "sale_progress" in df.columns else 0.0
-        X["days_until_sale_end"] = df["days_until_sale_end"].values if "days_until_sale_end" in df.columns else 0.0
+        X["is_major_seasonal_sale"] = (
+            df["is_major_seasonal_sale"].values
+            if "is_major_seasonal_sale" in df.columns
+            else 0
+        )
+        X["sale_progress"] = (
+            df["sale_progress"].values if "sale_progress" in df.columns else 0.0
+        )
+        X["days_until_sale_end"] = (
+            df["days_until_sale_end"].values
+            if "days_until_sale_end" in df.columns
+            else 0.0
+        )
 
         for col in ["base_price", "is_multiplayer", "is_coop", "log_positive_reviews"]:
             X[col] = df[col].values if col in df.columns else 0.0
 
         return X
 
+    def get_game_model(self, appid: int) -> Any:
+        """Retrieve dedicated game model or fall back to global."""
+        return self.game_models.get(int(appid), self)
+
     def fit(
         self, df: pd.DataFrame, target_col: str = "demand"
     ) -> "HybridProphetLGBMModel":
-        """Fit two-stage decoupled model on historical data."""
+        """Fit game-specific hybrid models for each title alongside global fallback."""
         fit_df = df.copy()
         fit_df["date"] = pd.to_datetime(fit_df["date"])
 
-        # Determine dynamic baseline scale per observation
+        # Train dedicated per-game models
+        if "appid" in fit_df.columns:
+            for appid_val, group in fit_df.groupby("appid"):
+                appid_int = int(appid_val)
+                g_model = SingleGameHybridModel(
+                    appid=appid_int,
+                    game_name=str(group.get("game_name", pd.Series([""])).iloc[-1]),
+                    changepoint_prior_scale=self.changepoint_prior_scale,
+                    weekly_seasonality=self.weekly_seasonality,
+                    lgb_n_estimators=self.lgb_n_estimators,
+                    lgb_learning_rate=self.lgb_learning_rate,
+                    random_state=self.random_state,
+                )
+                g_model.fit(group, target_col=target_col)
+                self.game_models[appid_int] = g_model
+
+        # Also fit global baseline
         if "sales_rolling_30" in fit_df.columns and fit_df["sales_rolling_30"].notna().any():
             scale = fit_df["sales_rolling_30"].clip(lower=10.0)
-        elif "sales_lag_1" in fit_df.columns and fit_df["sales_lag_1"].notna().any():
-            scale = fit_df["sales_lag_1"].clip(lower=10.0)
         else:
             scale = pd.Series(fit_df[target_col].median(), index=fit_df.index).clip(lower=10.0)
 
         fit_df["_scale"] = scale
         fit_df["_norm_demand"] = fit_df[target_col] / fit_df["_scale"]
 
-        # 1. Fit Prophet macro model strictly on unpromoted / organic series
-        is_sale = fit_df["is_steam_sale"] == 1 if "is_steam_sale" in fit_df.columns else pd.Series(False, index=fit_df.index)
-        non_sale_df = fit_df[~is_sale]
         macro_df = (
-            non_sale_df.groupby("date")["_norm_demand"]
+            fit_df.groupby("date")["_norm_demand"]
             .mean()
             .reset_index()
         )
-
         macro_prophet_data = pd.DataFrame()
         macro_prophet_data["ds"] = macro_df["date"].dt.tz_localize(None)
         macro_prophet_data["y"] = np.log(macro_df["_norm_demand"].clip(lower=0.01).astype(float))
         self.prophet_model.fit(macro_prophet_data)
 
-        # In-sample Prophet baseline predictions across full training set
-        prophet_in = pd.DataFrame()
-        prophet_in["ds"] = fit_df["date"].dt.tz_localize(None)
-        prophet_forecast = self.prophet_model.predict(prophet_in)
-        norm_base = np.clip(np.exp(prophet_forecast["yhat"].values), 0.0, None)
+        p_in = pd.DataFrame({"ds": fit_df["date"].dt.tz_localize(None)})
+        p_forecast = self.prophet_model.predict(p_in)
+        norm_base = np.clip(np.exp(p_forecast["yhat"].values), 0.0, None)
         prophet_base = norm_base * fit_df["_scale"].values
 
-        # 2. Fit Stage 1 Organic LightGBM model on organic (non-sale) rows
         X_org = self._prepare_organic_features(fit_df, scale.values)
-        log_org_ratio = np.log(np.clip(fit_df[target_col].values / np.maximum(prophet_base, 10.0), 0.05, 20.0))
-        self.lgb_organic_model.fit(X_org[~is_sale], log_org_ratio[~is_sale])
+        log_org_ratio = np.log(
+            np.clip(fit_df[target_col].values / np.maximum(prophet_base, 10.0), 0.05, 20.0)
+        )
+        self.lgb_organic_model.fit(X_org, log_org_ratio)
 
-        # Predict full in-sample organic demand
-        pred_org_full = prophet_base * np.exp(self.lgb_organic_model.predict(X_org))
-
-        # 3. Fit Stage 2 Uplift model on promotional rows
+        # Uplift model fallback
+        is_sale = (
+            fit_df["is_steam_sale"] == 1
+            if "is_steam_sale" in fit_df.columns
+            else pd.Series(False, index=fit_df.index)
+        )
         if is_sale.any():
             X_up = self._prepare_uplift_features(fit_df)
             y_actual = fit_df[target_col].values
-            rel_uplift_target = np.clip((y_actual[is_sale] / np.maximum(prophet_base[is_sale], 10.0)) - 1.0, 0.0, 10.0)
+            rel_uplift_target = np.clip(
+                (y_actual[is_sale] / np.maximum(prophet_base[is_sale], 10.0)) - 1.0,
+                0.0,
+                10.0,
+            )
             self.uplift_model.fit(X_up[is_sale], rel_uplift_target)
 
         return self
 
     def predict_components(self, df: pd.DataFrame) -> dict[str, np.ndarray]:
-        """Generate decomposed components: organic baseline, uplift factor, and combined."""
+        """Generate decomposed components routing to per-game model if available."""
+        if "appid" in df.columns:
+            unique_appids = df["appid"].unique()
+            if len(unique_appids) == 1 and int(unique_appids[0]) in self.game_models:
+                return self.game_models[int(unique_appids[0])].predict_components(df)
+            elif len(unique_appids) > 1 and all(int(a) in self.game_models for a in unique_appids):
+                combined_arr = np.zeros(len(df))
+                prophet_base_arr = np.zeros(len(df))
+                organic_demand_arr = np.zeros(len(df))
+                for appid_val, group in df.groupby("appid"):
+                    g_res = self.game_models[int(appid_val)].predict_components(group)
+                    idx = group.index
+                    combined_arr[df.index.get_indexer(idx)] = g_res["combined"]
+                    prophet_base_arr[df.index.get_indexer(idx)] = g_res["prophet_base"]
+                    organic_demand_arr[df.index.get_indexer(idx)] = g_res["organic_demand"]
+                return {
+                    "combined": combined_arr,
+                    "prophet_base": prophet_base_arr,
+                    "organic_demand": organic_demand_arr,
+                    "uplift_factor": np.ones(len(df)),
+                    "lgbm_residual": combined_arr - prophet_base_arr,
+                    "trend": prophet_base_arr,
+                    "weekly": np.zeros(len(df)),
+                    "yearly": np.zeros(len(df)),
+                    "yhat_lower": np.clip(combined_arr * 0.85, 0.0, None),
+                    "yhat_upper": combined_arr * 1.15,
+                }
+
+        # Global fallback
         if "sales_rolling_30" in df.columns and df["sales_rolling_30"].notna().any():
             scale = df["sales_rolling_30"].clip(lower=10.0).values
         elif "sales_lag_1" in df.columns and df["sales_lag_1"].notna().any():
@@ -242,45 +428,31 @@ class HybridProphetLGBMModel:
         else:
             scale = np.ones(len(df))
 
-        prophet_data = pd.DataFrame()
-        prophet_data["ds"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
+        prophet_data = pd.DataFrame({"ds": pd.to_datetime(df["date"]).dt.tz_localize(None)})
         prophet_forecast = self.prophet_model.predict(prophet_data)
-
         norm_base = np.clip(np.exp(prophet_forecast["yhat"].values), 0.0, None)
         prophet_base = norm_base * scale
 
-        # Organic correction
         X_org = self._prepare_organic_features(df, scale)
         r_org = self.lgb_organic_model.predict(X_org)
         organic_demand = np.clip(prophet_base * np.exp(r_org), 0.0, None)
 
-        # Uplift calculation
-        is_sale = df["is_steam_sale"] == 1 if "is_steam_sale" in df.columns else np.zeros(len(df), dtype=bool)
-        if isinstance(is_sale, pd.Series):
-            is_sale = is_sale.values
-
-        if np.any(is_sale):
-            X_up = self._prepare_uplift_features(df)
-            rel_lift = np.maximum(0.0, self.uplift_model.predict(X_up))
-            uplift_mult = np.where(is_sale, 1.0 + rel_lift, 1.0)
-            combined = organic_demand * uplift_mult
-        else:
-            combined = organic_demand
-            uplift_mult = np.ones(len(df))
+        yearly_comp = prophet_forecast["yearly"].values if "yearly" in prophet_forecast else np.zeros(len(df))
+        weekly_comp = prophet_forecast["weekly"].values if "weekly" in prophet_forecast else np.zeros(len(df))
+        trend_comp = prophet_forecast["trend"].values if "trend" in prophet_forecast else prophet_base
 
         return {
-            "combined": combined,
+            "combined": organic_demand,
             "prophet_base": prophet_base,
             "organic_demand": organic_demand,
-            "uplift_factor": uplift_mult,
-            "lgbm_residual": combined - prophet_base,
-            "trend": prophet_forecast.get("trend", prophet_base).values,
-            "weekly": prophet_forecast.get("weekly", np.zeros(len(df))).values,
-            "yearly": prophet_forecast.get("yearly", np.zeros(len(df))).values,
-            "yhat_lower": np.clip(combined * 0.85, 0.0, None),
-            "yhat_upper": combined * 1.15,
+            "uplift_factor": np.ones(len(df)),
+            "lgbm_residual": organic_demand - prophet_base,
+            "trend": trend_comp,
+            "weekly": weekly_comp,
+            "yearly": yearly_comp,
+            "yhat_lower": np.clip(organic_demand * 0.85, 0.0, None),
+            "yhat_upper": organic_demand * 1.15,
         }
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
-        """Return combined demand predictions."""
         return self.predict_components(df)["combined"]

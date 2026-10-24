@@ -13,14 +13,18 @@ def create_promotional_features(
     calendar: SteamSalesCalendar | None = None,
     base_price: float = 14.99,
     default_discount_depth: float = 0.0,
+    appid: int | None = None,
 ) -> pd.DataFrame:
     """Map Steam Sales Calendar and discount indicators onto time series."""
     out = df.copy()
     cal = calendar or SteamSalesCalendar()
 
+    if appid is None and "appid" in out.columns:
+        appid = int(out["appid"].iloc[-1])
+
     dates = pd.to_datetime(out[date_col]).dt.date
 
-    evaluations = [cal.evaluate_date(d) for d in dates]
+    evaluations = [cal.evaluate_date(d, appid=appid) for d in dates]
     eval_df = pd.DataFrame(evaluations)
 
     for col in eval_df.columns:
@@ -31,14 +35,16 @@ def create_promotional_features(
     out["storefront_exposure"] = np.where(out["is_steam_sale"] == 1, exp_series, 0.0)
 
     # Discount depth: if an active Steam sale is happening and no explicit discount column is given,
-    # assume typical indie discount depth (e.g. 20-50%), otherwise default_discount_depth
+    # use evaluated discount from calendar event, otherwise default_discount_depth
     if "discount_depth" not in out.columns:
-        # Typical indie discount during major seasonal sale is 33% to 50%
-        out["discount_depth"] = np.where(
-            out["is_major_seasonal_sale"] == 1,
-            0.40,
-            np.where(out["is_steam_sale"] == 1, 0.25, default_discount_depth),
-        )
+        if "discount_depth" in eval_df.columns:
+            out["discount_depth"] = eval_df["discount_depth"].values
+        else:
+            out["discount_depth"] = np.where(
+                out["is_major_seasonal_sale"] == 1,
+                0.40,
+                np.where(out["is_steam_sale"] == 1, 0.25, default_discount_depth),
+            )
 
     out["effective_price"] = base_price * (1.0 - out["discount_depth"])
 

@@ -77,6 +77,7 @@ class FeaturePipeline:
             date_col="date",
             calendar=self.calendar,
             base_price=base_price,
+            appid=appid,
         )
 
         # 4. Autoregressive lags (Listing 5 in syllabus)

@@ -11,6 +11,7 @@ class SteamSaleEvent:
     start_date: date
     end_date: date
     typical_discount_multiplier: float = 1.0
+    appid: int | None = None
 
 
 # Curated catalog of major Steam sales from 2018 through 2026
@@ -160,6 +161,22 @@ HISTORICAL_STEAM_SALES: list[SteamSaleEvent] = [
         "Steam Summer Sale 2026", "major_seasonal", date(2026, 6, 25), date(2026, 7, 9)
     ),
     SteamSaleEvent(
+        "Terraria Late Summer Sale",
+        "custom",
+        date(2026, 8, 20),
+        date(2026, 8, 31),
+        typical_discount_multiplier=0.50,
+        appid=105600,
+    ),
+    SteamSaleEvent(
+        "Hades Supergiant Publisher Sale",
+        "custom",
+        date(2026, 9, 26),
+        date(2026, 10, 12),
+        typical_discount_multiplier=0.66,
+        appid=1145360,
+    ),
+    SteamSaleEvent(
         "Steam Autumn Sale 2026",
         "major_seasonal",
         date(2026, 11, 24),
@@ -179,26 +196,40 @@ class SteamSalesCalendar:
             events or HISTORICAL_STEAM_SALES, key=lambda e: e.start_date
         )
 
-    def get_event_on(self, target_date: date | datetime) -> SteamSaleEvent | None:
+    def get_event_on(
+        self, target_date: date | datetime, appid: int | None = None
+    ) -> SteamSaleEvent | None:
         """Return the active sale event on a specific date, if any."""
         if isinstance(target_date, datetime):
             target_date = target_date.date()
 
-        for ev in self.events:
-            if ev.start_date <= target_date <= ev.end_date:
-                return ev
-        return None
+        matching = [
+            ev for ev in self.events
+            if ev.start_date <= target_date <= ev.end_date
+            and (ev.appid is None or appid is None or ev.appid == appid)
+        ]
+        if not matching:
+            return None
 
-    def evaluate_date(self, target_date: date | datetime) -> dict[str, object]:
+        # Prefer game-specific event over global event
+        for ev in matching:
+            if appid is not None and ev.appid == appid:
+                return ev
+        return matching[0]
+
+    def evaluate_date(
+        self, target_date: date | datetime, appid: int | None = None
+    ) -> dict[str, object]:
         """Compute calendar feature flags for a given date."""
         if isinstance(target_date, datetime):
             target_date = target_date.date()
 
-        ev = self.get_event_on(target_date)
+        ev = self.get_event_on(target_date, appid=appid)
         if ev:
             day_index = (target_date - ev.start_date).days
             total_days = (ev.end_date - ev.start_date).days + 1
             days_until_end = (ev.end_date - target_date).days
+            discount = float(ev.typical_discount_multiplier if ev.typical_discount_multiplier is not None else 0.33)
             return {
                 "is_steam_sale": 1,
                 "is_major_seasonal_sale": 1 if ev.sale_type == "major_seasonal" else 0,
@@ -207,10 +238,14 @@ class SteamSalesCalendar:
                 "sale_progress": (day_index + 1) / max(total_days, 1),
                 "days_until_sale_end": max(days_until_end, 0),
                 "days_since_last_sale": 0,
+                "discount_depth": discount,
             }
 
         # Calculate days since previous sale and days until next sale
-        past_events = [e for e in self.events if e.end_date < target_date]
+        past_events = [
+            e for e in self.events
+            if e.end_date < target_date and (e.appid is None or appid is None or e.appid == appid)
+        ]
         days_since_last = (
             (target_date - past_events[-1].end_date).days if past_events else 999
         )
@@ -223,6 +258,7 @@ class SteamSalesCalendar:
             "sale_progress": 0.0,
             "days_until_sale_end": -1,
             "days_since_last_sale": min(days_since_last, 999),
+            "discount_depth": 0.0,
         }
 
     def get_upcoming_sales(

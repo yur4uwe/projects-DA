@@ -145,12 +145,25 @@ def train_eval_pipeline(
     # Export metadata and save production artifacts
     registry.export_metadata_json("models/metadata.json")
 
+    # Fit final production model on full dataset so it incorporates all empirical sales
+    logger.info("Fitting final production models on full catalog history...")
+    m4_prod = HybridProphetLGBMModel(
+        yearly_seasonality=True,
+        weekly_seasonality=True,
+        lgb_n_estimators=200,
+        lgb_learning_rate=0.03,
+    )
+    m4_prod.fit(df, target_col="demand")
+
+    m3_prod = LightGBMDemandModel(n_estimators=500, learning_rate=0.05, num_leaves=31)
+    m3_prod.fit(df, df["demand"])
+
     # Save models
     models_dir = Path("models")
-    joblib.dump(m4, models_dir / "indie_demand_model.joblib")
-    joblib.dump(m3, models_dir / "lgbm_global_model.joblib")
+    joblib.dump(m4_prod, models_dir / "indie_demand_model.joblib")
+    joblib.dump(m3_prod, models_dir / "lgbm_global_model.joblib")
     logger.info(
-        "Exported trained model artifacts to models/indie_demand_model.joblib and models/lgbm_global_model.joblib"
+        "Exported production model artifacts to models/indie_demand_model.joblib and models/lgbm_global_model.joblib"
     )
 
 

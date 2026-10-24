@@ -224,48 +224,44 @@ def simulate_promotional_campaign(
         org_buffer = pd.concat([org_buffer, new_org_row], ignore_index=True)
 
         # ---------------------------------------------------------------------
-        # 2. Promotional Uplift & Realistic Discount Dynamics
+        # 2. Promotional Uplift via Trained Machine Learning Model
         # ---------------------------------------------------------------------
         is_discounted = discount_depth > 0.001
 
         if in_promo_window and is_discounted:
-            active_discount = discount_depth
-
-            # 1. Base economic price elasticity: (1 - d)^(-epsilon) - 1.0
-            epsilon = 0.85
-            base_lift = (1.0 - active_discount) ** (-epsilon) - 1.0
-
-            # 2. Storefront exposure ramp: Day 0 (announcement, install queue), Day 1 (visibility), Day 2+ (peak)
-            ramp = 0.60 if days_from_start == 0 else (0.85 if days_from_start == 1 else 1.0)
-
-            # 3. Cumulative player adoption across sale: CCU accumulates as more players buy and install
-            adoption = 1.0 + 0.30 * ((days_from_start / max(sale_duration_days - 1, 1)) ** 0.85)
-
-            # 4. Final 24-48h "Last Chance" urgency rush (Steam wishlist notifications)
+            day_promo = day_org.copy()
+            day_promo["is_steam_sale"] = 1
+            day_promo["discount_depth"] = discount_depth
+            day_promo["effective_price"] = (
+                day_promo["base_price"] * (1.0 - discount_depth)
+                if "base_price" in day_promo.columns
+                else 0.0
+            )
+            day_promo["sale_day_index"] = days_from_start
             days_left = max(sale_duration_days - 1 - days_from_start, 0)
-            if days_left == 0:
-                fomo = 1.25  # Final day spike
-            elif days_left == 1:
-                fomo = 1.12  # Penultimate day rush
+            day_promo["days_until_sale_end"] = days_left
+            day_promo["sale_progress"] = float(days_from_start) / max(sale_duration_days, 1)
+
+            # Evaluate through the active model components directly using trained uplift
+            if hasattr(active_model, "predict_components"):
+                comps = active_model.predict_components(day_promo)
+                pred_val = float(comps["combined"][0])
+                pred_lower = float(comps.get("yhat_lower", [pred_val * 0.88])[0])
+                pred_upper = float(comps.get("yhat_upper", [pred_val * 1.12])[0])
             else:
-                fomo = 1.0
+                pred_val = float(active_model.predict(day_promo)[0])
+                pred_lower = max(0.0, pred_val * 0.88)
+                pred_upper = pred_val * 1.12
 
-            # 5. Weekend playtime surge
-            is_wknd = int(day_with_cal["is_weekend"].iloc[0])
-            weekend_factor = 1.15 if is_wknd else 1.0
-
-            rel_lift = base_lift * ramp * adoption * fomo * weekend_factor
-            pred_val = org_val * (1.0 + rel_lift)
-            peak_promotional_lift = max(peak_promotional_lift, rel_lift)
-            pred_lower = max(0.0, pred_val * 0.88)
-            pred_upper = pred_val * 1.12
+            current_lift = max(0.0, (pred_val / max(org_val, 1.0)) - 1.0)
+            peak_promotional_lift = max(peak_promotional_lift, current_lift)
             sale_name_str = custom_event_name if is_custom_event else "Steam Seasonal Sale"
 
         elif f_date > promo_end and is_discounted:
             days_since = (f_date - promo_end).days
-            # Post-sale gameplay tail decaying smoothly back to organic baseline
-            tail_factor = 0.50 * np.exp(-days_since / 2.5)
-            tail_lift = peak_promotional_lift * tail_factor if tail_factor > 0.02 else 0.0
+            # Smooth post-sale player retention decay without artificial cliffs
+            retention_factor = float(np.exp(-days_since / 10.0))
+            tail_lift = peak_promotional_lift * retention_factor
             pred_val = org_val * (1.0 + tail_lift)
             pred_lower = max(0.0, pred_val * 0.88)
             pred_upper = pred_val * 1.12

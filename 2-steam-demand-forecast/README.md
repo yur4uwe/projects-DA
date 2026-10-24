@@ -1,5 +1,7 @@
 # Steam Indie Game Demand Forecasting & Promotional Scheduler
 
+> For the comprehensive engineering analysis, data pivot, and milestone results, read the full **[Technical Report](docs/REPORT.md)**.
+
 ## Objective
 Ingest historical player activity from the Steam platform and build time-series models to forecast daily concurrent player demand, analyze promotional discount elasticity, and provide an interactive sales scheduling tool for indie game developers conforming to the hybrid **Prophet + LightGBM** architecture outlined in [program.pdf](file:///home/yur4uwe/Downloads/program%20%281%29-1.pdf#L16631).
 

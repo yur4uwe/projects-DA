@@ -203,6 +203,7 @@ with st.spinner(f"Querying server for {horizon_days}-day multi-step simulation..
 forecast_df = pd.DataFrame(sim_data["forecast_series"])
 forecast_df["date"] = pd.to_datetime(forecast_df["date"])
 baseline_ccu = sim_data["recent_baseline_ccu"]
+peak_promo_ccu = sim_data["peak_promo_ccu"]
 peak_promo_peak_ccu = sim_data.get("peak_promo_peak_ccu", peak_promo_ccu * 1.45)
 game_peak_ratio = sim_data.get("peak_ratio", 1.45)
 surge_multiplier = sim_data["peak_surge_multiplier"]

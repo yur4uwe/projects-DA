@@ -76,4 +76,9 @@ docker-compose.override.yml
 # Agents
 .agents/
 .gemini/
+
+# Report generation helpers
 reports/
+
+# Ingore program description file
+program.[a-z]*

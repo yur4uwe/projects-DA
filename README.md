@@ -10,7 +10,7 @@ This repository contains three end-to-end data analysis and machine learning pro
 | :- | :--- | :--- | :--- | :--- |
 | 01 | [01-tech-labor-market](file:///home/yur4uwe/Uni/data-analisys/01-tech-labor-market/README.md) | HR Tech / Labor Economics | Tech job scraping, salary modeling, and skill attribution. | In progress |
 | 02 | [02-steam-demand-forecast](file:///home/yur4uwe/Uni/data-analisys/02-steam-demand-forecast/README.md) | Digital Media / Gaming Analytics | Steam player count time-series ingestion and demand forecasting. | In progress |
-| 03 | [03-secondhand-deal-spotter](file:///home/yur4uwe/Uni/data-analisys/03-secondhand-deal-spotter/README.md) | E-commerce / Second-Hand Market | Marketplace listing valuation and pricing anomaly detection. | In progress |
+| 03 | [3-secondhand-deal-spotter](file:///home/yur4uwe/Uni/data-analisys/3-secondhand-deal-spotter/README.md) | E-commerce / Second-Hand Market | Marketplace deal tier classification with Random Forest. | In progress |
 
 ---
 

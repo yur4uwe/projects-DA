@@ -1,7 +1,9 @@
-# Second-Hand Market Valuation & Deal Spotter
+# Second-Hand Deal Spotter & Market Classification
 
-## Objective
-Scrape active marketplace listings, estimate fair market values using regression models, and identify statistical pricing anomalies to detect underpriced deals.
+## Overview
+A machine learning classification system designed to detect and categorize pricing attractiveness in secondary marketplaces. By analyzing product specifications, age, condition, and listed asking prices against prevailing market distributions, the model classifies listings into distinct deal tiers (such as *Great Deal*, *Fair Price*, and *Overpriced*).
+
+Unlike direct regression models, this project frames deal spotting as an ensemble classification problem using Random Forest, evaluating multi-class decision boundaries, class probability calibration, and feature attribution across diverse item segments.
 
 ---
 
@@ -35,7 +37,7 @@ docker run -p 8501:8501 secondhand-deal-spotter
 ## Directory Structure
 
 ```text
-03-secondhand-deal-spotter/
+3-secondhand-deal-spotter/
 ├── data/
 │   ├── raw/
 │   └── processed/
@@ -53,9 +55,9 @@ docker run -p 8501:8501 secondhand-deal-spotter
 ---
 
 ## Status & Roadmap
-- [ ] Marketplace scraper setup
-- [ ] Data cleaning & categorical parsing
-- [ ] Depreciation & attribute feature engineering
-- [ ] Valuation model & residual scoring implementation
-- [ ] Streamlit interface
-- [ ] Docker packaging
+- [ ] Marketplace listing ingestion & data source setup
+- [ ] Spec extraction, cleaning & market baseline generation
+- [ ] Deal tier classification labeling & feature engineering
+- [ ] Random Forest classification pipeline & multi-class evaluation
+- [ ] Interactive Streamlit deal explorer & listing evaluator
+- [ ] Docker containerization & test coverage

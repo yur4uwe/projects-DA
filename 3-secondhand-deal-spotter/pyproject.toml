@@ -1,0 +1,24 @@
+[project]
+name = "3-secondhand-deal-spotter"
+version = "0.1.0"
+description = "Second-Hand Market Valuation & Deal Spotter"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "joblib>=1.4.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "plotly>=5.20.0",
+    "pyarrow>=15.0.0",
+    "scikit-learn>=1.4.0",
+    "streamlit>=1.35.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

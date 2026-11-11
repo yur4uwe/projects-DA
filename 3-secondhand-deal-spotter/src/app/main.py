@@ -1,26 +1,18 @@
-"""Interactive Streamlit dashboard for secondary PC marketplace deal detection."""
+"""Interactive Streamlit dashboard for secondary PC marketplace deal detection.
 
-import json
-import sys
-from pathlib import Path
-from typing import Any
+Communicates with the FastAPI backend for predictions and data retrieval.
+"""
 
+import os
+
+import httpx
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.features.schema import DEAL_TIERS
-from src.models.predict import predict_deal
-
-DATA_PATH = PROJECT_ROOT / "data" / "processed" / "pc_listings_processed.parquet"
-METADATA_PATH = PROJECT_ROOT / "models" / "metadata.json"
-IMPORTANCE_PATH = PROJECT_ROOT / "models" / "global_feature_importance.json"
+API_BASE = os.environ.get("API_URL", "http://localhost:8000")
 
 st.set_page_config(
     page_title="Second-Hand Deal Spotter & Market Valuation",
@@ -28,32 +20,71 @@ st.set_page_config(
 )
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_processed_data() -> pd.DataFrame:
-    if DATA_PATH.exists():
-        return pd.read_parquet(DATA_PATH)
-    return pd.DataFrame()
+    try:
+        resp = httpx.get(f"{API_BASE}/data/listings", timeout=30.0)
+        resp.raise_for_status()
+        payload = resp.json()
+        return pd.DataFrame(payload["records"])
+    except Exception as e:
+        st.error(f"Failed to load listings from backend: {e}")
+        return pd.DataFrame()
 
 
-@st.cache_data
-def load_metadata() -> dict[str, Any]:
-    if METADATA_PATH.exists():
-        with METADATA_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+@st.cache_data(ttl=300)
+def load_metadata() -> dict:
+    try:
+        resp = httpx.get(f"{API_BASE}/data/metadata", timeout=10.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {}
 
 
-@st.cache_data
-def load_feature_importance() -> list[dict[str, Any]]:
-    if IMPORTANCE_PATH.exists():
-        with IMPORTANCE_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+@st.cache_data(ttl=300)
+def load_feature_importance() -> list[dict]:
+    try:
+        resp = httpx.get(f"{API_BASE}/data/feature-importance", timeout=10.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return []
 
 
+@st.cache_data(ttl=300)
+def load_unique_values() -> dict:
+    try:
+        resp = httpx.get(f"{API_BASE}/data/unique-values", timeout=10.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {"companies": [], "type_names": [], "deal_tiers": []}
+
+
+def call_predict(input_record: dict) -> dict | None:
+    """Send prediction request to backend. Returns result dict or None on error."""
+    try:
+        resp = httpx.post(f"{API_BASE}/predict", json=input_record, timeout=30.0)
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        st.error(
+            f"Prediction request failed ({e.response.status_code}): {e.response.text}"
+        )
+        return None
+    except Exception as e:
+        st.error(f"Could not reach backend: {e}")
+        return None
+
+
+# Load data from API
 df_data = load_processed_data()
 metadata = load_metadata()
 feature_importance = load_feature_importance()
+unique_vals = load_unique_values()
+
+DEAL_TIERS = unique_vals.get("deal_tiers", ["Fair Price", "Great Deal", "Overpriced"])
 
 st.title("Second-Hand Deal Spotter & Market Classification")
 st.markdown(
@@ -61,7 +92,9 @@ st.markdown(
 )
 
 if df_data.empty:
-    st.error("Processed dataset not found. Run `uv run python -m src.features.builder` first.")
+    st.error(
+        "Processed dataset not found. Run `uv run python -m src.features.builder` first."
+    )
     st.stop()
 
 # Header KPIs
@@ -75,7 +108,7 @@ overpriced_pct = (df_data["deal_tier"] == "Overpriced").mean() * 100
 with kpi1:
     st.metric("Total Listings", f"{total_count:,}")
 with kpi2:
-    st.metric("Median Market Price", f"€{median_price:,.0f}")
+    st.metric("Median Market Price", f"\u20ac{median_price:,.0f}")
 with kpi3:
     st.metric("Great Deals", f"{great_deals_pct:.1f}%")
 with kpi4:
@@ -84,7 +117,11 @@ with kpi5:
     st.metric("Overpriced", f"{overpriced_pct:.1f}%")
 
 tab_spotter, tab_market, tab_model = st.tabs(
-    ["Deal Spotter & Evaluator", "Marketplace Explorer", "Model Diagnostics & Attribution"]
+    [
+        "Deal Spotter & Evaluator",
+        "Marketplace Explorer",
+        "Model Diagnostics & Attribution",
+    ]
 )
 
 # -------------------------------------------------------------
@@ -96,23 +133,22 @@ with tab_spotter:
         "Configure product hardware specifications and asking price to classify deal attractiveness."
     )
 
+    companies = unique_vals.get("companies", sorted(df_data["Company"].unique()))
+    type_names = unique_vals.get("type_names", sorted(df_data["TypeName"].unique()))
+
     with st.form("listing_eval_form"):
         col_spec1, col_spec2, col_spec3 = st.columns(3)
 
         with col_spec1:
             company = st.selectbox(
                 "Manufacturer / Brand",
-                options=sorted(df_data["Company"].unique()),
-                index=sorted(df_data["Company"].unique()).index("Dell")
-                if "Dell" in df_data["Company"].unique()
-                else 0,
+                options=companies,
+                index=companies.index("Dell") if "Dell" in companies else 0,
             )
             typename = st.selectbox(
                 "Form Factor / Type",
-                options=sorted(df_data["TypeName"].unique()),
-                index=sorted(df_data["TypeName"].unique()).index("Notebook")
-                if "Notebook" in df_data["TypeName"].unique()
-                else 0,
+                options=type_names,
+                index=type_names.index("Notebook") if "Notebook" in type_names else 0,
             )
             cpu_tier = st.selectbox(
                 "CPU Processor Tier",
@@ -175,7 +211,7 @@ with tab_spotter:
 
         st.divider()
         asking_price = st.number_input(
-            "Listing Asking Price (€)",
+            "Listing Asking Price (\u20ac)",
             min_value=50.0,
             max_value=7000.0,
             value=650.0,
@@ -221,19 +257,19 @@ with tab_spotter:
             "asking_price": float(asking_price),
         }
 
-        eval_result = predict_deal(input_record)
+        eval_result = call_predict(input_record)
 
-        tier = eval_result["deal_tier"]
-        conf = eval_result["confidence"]
-        baseline_price = eval_result["market_baseline_price"]
-        delta_eur = eval_result["price_delta_euros"]
-        savings_pct = eval_result["relative_savings_pct"]
+        if eval_result is not None:
+            tier = eval_result["deal_tier"]
+            conf = eval_result["confidence"]
+            baseline_price = eval_result["market_baseline_price"]
+            delta_eur = eval_result["price_delta_euros"]
+            savings_pct = eval_result["relative_savings_pct"]
 
-        st.subheader("Classification Outcome")
-        verdict_col1, verdict_col2 = st.columns([1, 1])
+            st.subheader("Classification Outcome")
+            verdict_col1, verdict_col2 = st.columns([1, 1])
 
-        with verdict_col1:
-            with st.container(border=True):
+            with verdict_col1, st.container(border=True):
                 if tier == "Great Deal":
                     st.success(f"Classification: **{tier}**")
                     st.markdown(
@@ -252,15 +288,14 @@ with tab_spotter:
 
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.metric("Asking Price", f"€{asking_price:,.2f}")
+                    st.metric("Asking Price", f"\u20ac{asking_price:,.2f}")
                     st.metric("Model Confidence", f"{conf * 100:.1f}%")
                 with c2:
-                    st.metric("Market Baseline", f"€{baseline_price:,.2f}")
+                    st.metric("Market Baseline", f"\u20ac{baseline_price:,.2f}")
                     delta_label = "Net Discount" if delta_eur <= 0 else "Price Premium"
-                    st.metric(delta_label, f"€{abs(delta_eur):,.2f}")
+                    st.metric(delta_label, f"\u20ac{abs(delta_eur):,.2f}")
 
-        with verdict_col2:
-            with st.container(border=True):
+            with verdict_col2, st.container(border=True):
                 st.markdown("**Calibrated Class Probabilities**")
                 prob_data = eval_result["probabilities"]
                 prob_df = pd.DataFrame(
@@ -286,7 +321,7 @@ with tab_spotter:
                 fig_prob.update_layout(
                     showlegend=False,
                     height=240,
-                    margin=dict(l=20, r=20, t=20, b=20),
+                    margin={"l": 20, "r": 20, "t": 20, "b": 20},
                     xaxis_title="Confidence Probability",
                     yaxis_title="",
                 )
@@ -343,8 +378,8 @@ with tab_market:
             hover_data=["Company", "Product", "Ram_GB", "Cpu_Tier", "price_ratio"],
             title="Asking Price vs Spec Baseline Valuation",
             labels={
-                "market_baseline_price": "Fair Market Baseline (€)",
-                "asking_price": "Listed Asking Price (€)",
+                "market_baseline_price": "Fair Market Baseline (\u20ac)",
+                "asking_price": "Listed Asking Price (\u20ac)",
                 "deal_tier": "Deal Tier",
             },
         )
@@ -360,7 +395,7 @@ with tab_market:
                 y=[0, max_val],
                 mode="lines",
                 name="Parity Baseline (1.0x)",
-                line=dict(color="gray", dash="dash"),
+                line={"color": "gray", "dash": "dash"},
             )
         )
         fig_scatter.update_layout(height=460)
@@ -374,7 +409,7 @@ with tab_market:
             color="deal_tier",
             color_discrete_map=color_map,
             title="Price Distribution Across Form Factors",
-            labels={"TypeName": "Form Factor", "asking_price": "Asking Price (€)"},
+            labels={"TypeName": "Form Factor", "asking_price": "Asking Price (\u20ac)"},
         )
         fig_box.update_layout(height=460, xaxis_tickangle=-30)
         st.plotly_chart(fig_box)
@@ -396,14 +431,12 @@ with tab_market:
         filtered_df[table_cols].sort_values(by="price_ratio", ascending=True),
         column_config={
             "asking_price": st.column_config.NumberColumn(
-                "Asking Price", format="€%.2f"
+                "Asking Price", format="\u20ac%.2f"
             ),
             "market_baseline_price": st.column_config.NumberColumn(
-                "Baseline Value", format="€%.2f"
+                "Baseline Value", format="\u20ac%.2f"
             ),
-            "price_ratio": st.column_config.NumberColumn(
-                "Price Ratio", format="%.2fx"
-            ),
+            "price_ratio": st.column_config.NumberColumn("Price Ratio", format="%.2fx"),
         },
     )
 
@@ -443,7 +476,7 @@ with tab_model:
 
             fig_cm = px.imshow(
                 norm_matrix,
-                labels=dict(x="Predicted Deal Tier", y="Ground Truth Deal Tier"),
+                labels={"x": "Predicted Deal Tier", "y": "Ground Truth Deal Tier"},
                 x=labels,
                 y=labels,
                 color_continuous_scale="Blues",
@@ -465,8 +498,8 @@ with tab_model:
                 labels={"importance": "Relative Importance", "feature": "Feature"},
             )
             fig_imp.update_layout(
-                yaxis=dict(autorange="reversed"),
+                yaxis={"autorange": "reversed"},
                 height=380,
-                margin=dict(l=20, r=20, t=20, b=20),
+                margin={"l": 20, "r": 20, "t": 20, "b": 20},
             )
             st.plotly_chart(fig_imp)

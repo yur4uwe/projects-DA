@@ -4,18 +4,13 @@ WORKDIR /app
 
 ENV UV_COMPILE_BYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV API_URL=http://backend:8000
 
-# Copy dependency configuration
 COPY pyproject.toml uv.lock ./
 
-# Install project dependencies
 RUN uv sync --frozen --no-install-project
 
-# Copy source code, pre-trained model artifacts, and data
-COPY src/ src/
-COPY models/ models/
-COPY data/ data/
-COPY README.md ./
+COPY src/app/ src/app/
 
 EXPOSE 8501
 

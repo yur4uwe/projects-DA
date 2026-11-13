@@ -9,7 +9,14 @@ Unlike direct regression models, this project frames deal spotting as an ensembl
 
 ## Running Instructions
 
-### Local Execution with uv
+The dashboard uses a FastAPI backend. Training requires the Python source in
+`src/models/` and a local copy of the input dataset. If your checkout does not
+contain `src/models/`, obtain that source before training or starting the API.
+
+### Prepare the data and models
+
+Put the laptop listings CSV in `data/raw/laptop_price.csv`, then run these
+commands from `3-secondhand-deal-spotter/`:
 ```bash
 # Sync dependencies (creates/updates environment automatically)
 uv sync
@@ -25,8 +32,14 @@ uv run python -m src.models.train
 
 # Run automated tests
 uv run pytest tests/ -v
+```
 
-# Run the Streamlit dashboard
+### Local execution
+
+Start the API in one terminal and the dashboard in another:
+
+```bash
+uv run uvicorn src.api.main:app --port 8000
 uv run streamlit run src/app/main.py
 ```
 
@@ -37,12 +50,12 @@ uv add <package-name>
 
 ### Containerized Execution with Docker
 ```bash
-# Build Docker image
-docker build -t secondhand-deal-spotter .
-
-# Run container
-docker run -p 8501:8501 secondhand-deal-spotter
+docker compose up --build
 ```
+
+Open the dashboard at <http://localhost:8501>. The API health endpoint is
+<http://localhost:8000/health>. Compose mounts the prepared `data/` and
+`models/` directories into the backend.
 
 ---
 
@@ -84,7 +97,7 @@ docker run -p 8501:8501 secondhand-deal-spotter
 │   ├── test_features.py
 │   ├── test_models.py
 │   └── test_scraper.py
-├── Dockerfile
+├── compose.yml
 ├── pyproject.toml
 └── README.md
 ```

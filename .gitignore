@@ -62,8 +62,8 @@ venv.bak/
 *.tar.gz
 
 # Serialized models and large binaries (track .gitkeep)
-**/models/*
-!models/.gitkeep
+/*/models/*
+!/*/models/.gitkeep
 *.pkl
 *.joblib
 *.onnx

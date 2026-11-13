@@ -9,11 +9,7 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv sync --frozen --no-install-project
 
-COPY src/api/ src/api/
-COPY src/features/ src/features/
-COPY src/models/ src/models/
-COPY models/ models/
-COPY data/ data/
+COPY src/ src/
 
 EXPOSE 8000
 
